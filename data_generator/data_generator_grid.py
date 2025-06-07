@@ -22,9 +22,9 @@ class Sample2D:
     start: np.ndarray  # shape (2,)
     goal: np.ndarray  # shape (2,)
     path: np.ndarray  # (N, 2) smoothed/pruned path
-    raw_path: np.ndarray  # (M, 2) original RRT* path (optional)
+    raw_path: np.ndarray  # (M, 2) 
 
-    def to_dict(self):  # easier for np.savez_compressed
+    def to_dict(self): 
         d = asdict(self)
         d["obstacles"] = np.asarray(self.obstacles, dtype=float)
         return d
@@ -61,7 +61,9 @@ class DataGeneratorGrid:
         self.training_data_set = {
             "start": [],
             "goal": [],
-            "obstacles": [],
+            "paths": [],
+            "map": [],
+            
         }
 
         # grid size
@@ -90,7 +92,7 @@ class DataGeneratorGrid:
                 goal_tol=self.goal_tol,
                 rng=self.rng,
             )
-            path, train_data = planner.plan(
+            path = planner.plan(
                 start,
                 goal,
                 prune=True,
@@ -98,16 +100,15 @@ class DataGeneratorGrid:
                 interp_points=interp,
             )
             
-            if self.collection_data and len(train_data['start']) > 0:
-                self.training_data_set["start"].append(copy.deepcopy(train_data["start"]))
-                self.training_data_set["goal"].append(copy.deepcopy(train_data["goal"]))
-                self.training_data_set["obstacles"].append(copy.deepcopy(train_data["obstacles"]))
 
             if path is None:
                 continue
             
-            if not train_data and self.collection_data:
-                continue
+            self.training_data_set["start"].append(copy.deepcopy(start))
+            self.training_data_set["goal"].append(copy.deepcopy(goal))
+            self.training_data_set["map"].append(copy.deepcopy(grid))
+            self.training_data_set["paths"].append(copy.deepcopy(path))
+            
 
             raw_path = planner._plan_raw(start, goal)  # noqa: SLF001 – keep raw
             samples.append(
@@ -124,7 +125,6 @@ class DataGeneratorGrid:
             )
         if len(samples) < self.num_samples:
             raise RuntimeError("Could not create the requested number of samples.")
-        print(train_data)
         return samples, self.training_data_set
 
     def save_npz(self, samples: List[Sample2D], outfile: str | Path) -> None:

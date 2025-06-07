@@ -14,7 +14,7 @@ class RRTStar:
         self.bounds     = np.asarray(bounds, dtype=float)
         self.dim        = self.bounds.shape[0]
         self.max_iter   = max_iter
-        self.step_size  = step_sizeself.step_size
+        self.step_size  = step_size
         self.goal_tol   = goal_tol
         self.goal_bias  = goal_bias
         self.gamma_star = gamma_star

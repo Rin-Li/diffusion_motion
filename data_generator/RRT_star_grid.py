@@ -51,17 +51,13 @@ class RRTStarGrid:
         self.gamma_star = gamma_star
         self.rng = np.random.default_rng(rng)
         self.collet_traing_data = collect_training_data
-        self.training_data_set = {
-            "start": [],
-            "goal": [],
-            "obstacles": []
-        }
+
 
     def plan(self, start, goal, *, prune: bool = False, optimize: bool = False, interp_points: int = 50):
         
         raw_path = self._plan_raw(np.asarray(start), np.asarray(goal))
         if raw_path is None:
-            return None, self.training_data_set  # planning failure
+            return None  # planning failure
 
         path = np.asarray(raw_path)
 
@@ -74,7 +70,7 @@ class RRTStarGrid:
                 # fall back to pruned (or raw) path
                 path = self._prune_path(np.asarray(raw_path)) if prune else np.asarray(raw_path)
 
-        return path, self.training_data_set
+        return path
 
     # Private
     # Original plane
@@ -92,10 +88,6 @@ class RRTStarGrid:
             x_new = self._steer(node_near.x, x_rand)
             # Collect the traning dataset
             if self._segment_in_collision(node_near.x, x_new):
-                if not self.in_collision(x_new) and self.collet_traing_data:
-                    self.training_data_set["start"].append(node_near.x)
-                    self.training_data_set["goal"].append(x_new)
-                    self.training_data_set["obstacles"].append(self.grid)
                 continue
 
             r_n = min(self.gamma_star * (log(it) / it) ** (1 / self.dim), self.step_size * 2)
@@ -120,13 +112,6 @@ class RRTStarGrid:
                 potential = new_node.cost + np.linalg.norm(nbr.x - x_new)
                 if potential < nbr.cost and not self._segment_in_collision(nbr.x, x_new):
                     nbr.parent, nbr.cost = new_node, potential
-                # Collect the traning dataset
-                elif self._segment_in_collision(nbr.x, x_new):
-                    if not self.in_collision(x_new) and self.collet_traing_data:
-                        self.training_data_set["start"].append(nbr.x)
-                        self.training_data_set["goal"].append(x_new)
-                        self.training_data_set["obstacles"].append(self.grid)
-                        
 
             # goal check
             if np.linalg.norm(x_new - goal) <= self.goal_tol and not self._segment_in_collision(x_new, goal):
