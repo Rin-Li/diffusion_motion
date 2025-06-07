@@ -202,7 +202,7 @@ if __name__ == "__main__":
     gen.save_train_data("train_data_set.npy")
     train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
 
-    first = ds[0]
+    first = ds[3]
     print(first.path)
     planner_vis = RRTStarGrid(first.bounds, first.grid, first.cell_size)
     planner_vis.show(
