@@ -38,7 +38,7 @@ class DataGeneratorGrid:
         num_samples: int,
         *,
         collection_data: bool = True,
-        resolution: float = 0.1,
+        resolution: float = 1.0,
         max_rectangles: Tuple[int, int] = (5, 20),
         step_size: float = 0.5,
         max_iter_rrt: int = 2000,
@@ -46,8 +46,6 @@ class DataGeneratorGrid:
         rng: Optional[int | np.random.Generator] = None,
     ) -> None:
         self.bounds = np.asarray(bounds, dtype=float)
-        if self.bounds.shape != (2, 2):
-            raise ValueError("Only 2‑D bounds of shape (2,2) supported.")
         self.num_samples = int(num_samples)
         self.resolution = float(resolution)
         self.max_rectangles = max_rectangles
@@ -199,12 +197,13 @@ class DataGeneratorGrid:
 
 
 if __name__ == "__main__":
-    gen = DataGeneratorGrid(bounds=[(0, 10), (0, 10)], num_samples=1000, rng=42)
+    gen = DataGeneratorGrid(bounds=[(0, 24), (0, 24)], num_samples=4, rng=30)
     ds, train_data_set = gen.generate_dataset()
     gen.save_train_data("train_data_set.npy")
     train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
 
     first = ds[0]
+    print(first.path)
     planner_vis = RRTStarGrid(first.bounds, first.grid, first.cell_size)
     planner_vis.show(
         path=first.path,

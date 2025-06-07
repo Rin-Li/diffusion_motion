@@ -69,6 +69,7 @@ class RRTStarGrid:
             if path is False:  # smoothing failed (collision)
                 # fall back to pruned (or raw) path
                 path = self._prune_path(np.asarray(raw_path)) if prune else np.asarray(raw_path)
+                path = self._interpolate_path(path, min_points=30)
 
         return path
 
@@ -185,8 +186,8 @@ class RRTStarGrid:
 
     def _smooth_path(self, path, n_interp):
         if path is None or len(path) < 2:
-            return np.asarray(path)
-        
+            return path
+        print(path)
         pts = np.asarray(path)
         if len(pts) == 2:                      
             u = np.linspace(0.0, 1.0, 30)
@@ -203,6 +204,47 @@ class RRTStarGrid:
             if self._segment_in_collision(p, q):
                 return False
         return smoothed
+    
+    def _interpolate_path(self, path, min_points=30):
+        if len(path) >= min_points:
+            return path
+        
+        # Calculate total path length
+        distances = np.sqrt(np.sum(np.diff(path, axis=0)**2, axis=1))
+        total_length = np.sum(distances)
+        
+        # Create interpolation points
+        current_length = 0
+        interpolated_path = [path[0]]
+        
+        target_segment_length = total_length / (min_points - 1)
+        
+        for i in range(len(path) - 1):
+            segment_length = distances[i]
+            segment_start = path[i]
+            segment_end = path[i + 1]
+            
+            while current_length + segment_length >= target_segment_length * len(interpolated_path):
+                remaining_length = target_segment_length * len(interpolated_path) - current_length
+                ratio = remaining_length / segment_length
+                
+                new_point = segment_start + ratio * (segment_end - segment_start)
+                interpolated_path.append(new_point)
+                
+                if len(interpolated_path) >= min_points:
+                    break
+            
+            current_length += segment_length
+            
+            if len(interpolated_path) >= min_points:
+                break
+        
+        if len(interpolated_path) < min_points:
+            interpolated_path.append(path[-1])
+        else:
+            interpolated_path[-1] = path[-1]
+        
+        return np.array(interpolated_path)
 
     def show(self, path=None, raw_path=None, start=None, goal=None, figsize=(6, 6)):
         nx, ny = self.grid.shape
@@ -245,12 +287,12 @@ class RRTStarGrid:
 
 
 if __name__ == "__main__":
-    bounds = [(0.0, 10.0), (0.0, 10.0)]
-    cell = 0.1
+    bounds = [(0.0, 24.0), (0.0, 24.0)]
+    cell = 1
     nx, ny = (int((b[1] - b[0]) / cell) for b in bounds)
     grid = np.zeros((nx, ny), dtype=bool)
 
-    obstacles = [(np.array([5.0, 5.0]), 1.5), (np.array([6.5, 6.5]), 1.0)]
+    obstacles = [(np.array([8.5, 5.0]), 1.5), (np.array([10.0, 10.0]), 1.0)]
     Xs = (np.arange(nx) + 0.5) * cell + bounds[0][0]
     Ys = (np.arange(ny) + 0.5) * cell + bounds[1][0]
     XX, YY = np.meshgrid(Xs, Ys, indexing="ij")
@@ -259,12 +301,11 @@ if __name__ == "__main__":
         grid[mask] = True
 
     planner = RRTStarGrid(bounds, grid, cell, max_iter=200, step_size=0.5, goal_tol=0.3)
-    start, goal = np.array([1.0, 1.0]), np.array([9.0, 9.0])
+    start, goal = np.array([1.0, 1.0]), np.array([20.0, 20.0])
 
 
-    path, traing_set = planner.plan(start, goal, prune=True, optimize=True, interp_points=100)
+    path = planner.plan(start, goal, prune=True, optimize=True, interp_points=100)
     
-    np.savez("rrt_star_grid_dataset.npz", traing_set)
     
 
     if path is None:
