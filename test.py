@@ -34,7 +34,6 @@ class RRTVisualizer:
 
 
 if __name__ == "__main__":
-    # 加载数据
     data = np.load("rrt_2d_dataset_500.npz", allow_pickle=True)
 
     starts = data['starts']
@@ -48,7 +47,7 @@ if __name__ == "__main__":
     path = paths[idx]
     obstacles = obstacles_all[idx]
 
-    bounds = [(0, 8), (0, 8)]  # 可视化范围
+    bounds = [(0, 8), (0, 8)]  
 
     vis = RRTVisualizer()
     vis.visualize_path(bounds, obstacles, path=path, start=start, goal=goal)

@@ -279,72 +279,7 @@ class GaussianDiffusionPB(nn.Module):
             return x, torch.stack(diffusion, dim=1)
         else:
             return x
-
-    def replan(self, traj, cond, walls_loc, dn_steps):
-        '''dn_steps: a int, noisy level'''
-        device = self.betas.device
-        batch_size = 1
-
-        assert torch.is_tensor(traj)
-
-        input2d = traj.ndim < 3
-        if input2d:
-            traj = traj[None, ] # [1, h, 7])
-
-        ## 1. add 20 steps of noise
-        assert dn_steps < self.n_timesteps and dn_steps > self.n_timesteps / 11
-        # pdb.set_trace()
-        noisy_traj = self.q_sample(traj, dn_steps)
-        x = apply_conditioning(noisy_traj, cond, 0) # use x, consistent with other method
-
-        ## 2. denoise
-        for i in reversed(range(0, dn_steps)):
-            timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
-            x = self.p_sample(x, cond, timesteps, walls_loc, None)
-            x = apply_conditioning(x, cond, 0)
-            x = x.detach()
-            
-        if input2d:
-            x = x[0]
-        return x
     
-    def ddim_replan(self, traj, cond, walls_loc, dn_steps: torch.Tensor, ret_noisy_traj=False):
-        '''
-        dn_steps (int): refer to number of ddim denoising steps to run
-        ret_noise_traj: only return a noisy traj
-        '''
-        # utils.print_color(f'ddim replan steps: {dn_steps}')
-        device = self.betas.device
-        batch_size = 1
-        assert torch.is_tensor(traj)
-
-        input2d = traj.ndim < 3
-        if input2d:
-            traj = traj[None, ] # [1, h, 7])
-
-        ## 1. add 20 steps of noise
-        assert dn_steps <= self.ddim_num_inference_steps * 0.51
-        # e.g., [90, 80, ..., 20, 10, 0]
-        ts = self.ddim_set_timesteps(self.ddim_num_inference_steps) # np
-
-        noise_t = ts[-dn_steps].item()
-        noise_t = torch.tensor([noise_t,], device=device)
-        noisy_traj = self.q_sample(traj, noise_t) # noise_t must be a tensor [B,]
-        if ret_noisy_traj: # for policy compose: [1, h, dim]
-            return noisy_traj
-        x = apply_conditioning(noisy_traj, cond, 0) # use x, consistent with other method
-
-        ## 2. ddim denoise
-        for i in ts[-dn_steps:]:
-            timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
-            x = self.ddim_p_sample(x, cond, timesteps, walls_loc, eta=0.0, use_clipped_model_output=True)
-            
-            x = apply_conditioning(x, cond, 0)
-            x = x.detach()
-            
-        if input2d:
-            x = x[0]
-        return x
 
 
     def ddim_get_noisy_traj(self, traj, inference_steps, dn_steps: torch.Tensor, check_steps=True):
@@ -464,12 +399,6 @@ class GaussianDiffusionPB(nn.Module):
             else:
                 return self.p_sample_loop(shape, cond, walls_loc, *args, **kwargs)
     
-
-    
-
-
-
-
     #------------------------------------------ training ------------------------------------------#
 
     def q_sample(self, x_start, t, noise=None):

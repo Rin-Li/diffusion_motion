@@ -39,7 +39,7 @@ class DataGeneratorGrid:
         *,
         collection_data: bool = True,
         resolution: float = 1.0,
-        max_rectangles: Tuple[int, int] = (5, 20),
+        max_rectangles: Tuple[int, int] = (2, 6),
         step_size: float = 0.5,
         max_iter_rrt: int = 2000,
         goal_tol: float = 0.3,
@@ -197,12 +197,12 @@ class DataGeneratorGrid:
 
 
 if __name__ == "__main__":
-    gen = DataGeneratorGrid(bounds=[(0, 24), (0, 24)], num_samples=4, rng=30)
+    gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=10, rng=30)
     ds, train_data_set = gen.generate_dataset()
     gen.save_train_data("train_data_set.npy")
     train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
 
-    first = ds[3]
+    first = ds[6]
     print(first.path)
     planner_vis = RRTStarGrid(first.bounds, first.grid, first.cell_size)
     planner_vis.show(

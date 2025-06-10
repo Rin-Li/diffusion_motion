@@ -1,15 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
-def show(grid, path=None, raw_path=None, start=None, goal=None, figsize=(6, 6)):
-    grid = np.array(grid)  # Convert to numpy array
-    print(f"Grid shape: {grid.shape}")  # Debug info
-    print(f"Grid dtype: {grid.dtype}")  # Debug info
+def show(grid, path, start, goal, figsize=(6, 6)):
+    grid = np.array(grid)  
+    print("grid.shape:", grid.shape)
+    print("start:", start)
+    print("goal:", goal)
     
     nx, ny = grid.shape[0], grid.shape[1]
-    cell_size = 0.1  # Assuming each cell is 1x1 for simplicity
+    cell_size = 1  
     bounds = [(0, nx * cell_size), (0, ny * cell_size)]
-    origin = [bounds[0][0], bounds[1][0]]  # Extract origin coordinates properly
+    origin = [bounds[0][0], bounds[1][0]]  
     _, ax = plt.subplots(figsize=figsize)
     ax.set_aspect("equal")
     ax.set_xlim(bounds[0])
@@ -29,20 +31,10 @@ def show(grid, path=None, raw_path=None, start=None, goal=None, figsize=(6, 6)):
                     alpha=0.5,
                 )
                 ax.add_patch(rect)
-
-    def _draw(p, style, label):
-        p = np.asarray(p)
-        ax.plot(p[:, 0], p[:, 1], style, label=label)
-
-    if raw_path is not None:
-        _draw(raw_path, "r--", "raw")
-    if path is not None:
-        _draw(path, "b-", "pruned/opt")
-        ax.plot(path[:, 0], path[:, 1], "bo", ms=3)
-    if start is not None:
-        ax.plot(start[0], start[1], "go", ms=8, label="start")
-    if goal is not None:
-        ax.plot(goal[0], goal[1], "ro", ms=8, label="goal")
+    
+    ax.plot(path[:, 0], path[:, 1], "b-", lw=2, label="path")
+    ax.plot(start[0], start[1], "go", ms=8, label="start")
+    ax.plot(goal[0], goal[1], "ro", ms=8, label="goal")
     ax.legend()
     plt.grid(True)
     plt.show()
@@ -50,28 +42,21 @@ def show(grid, path=None, raw_path=None, start=None, goal=None, figsize=(6, 6)):
 
 train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
 
-
-for key in train_data_set:
-    print(f"{key}: type={type(train_data_set[key])}, len={len(train_data_set[key])}")
-
-flat_start = np.vstack(train_data_set["start"])   
-flat_goal = np.vstack(train_data_set["goal"])    
+flat_start = np.array(train_data_set["start"], dtype=float)
+flat_goal = np.array(train_data_set["goal"], dtype=float)
+flat_map = np.array(train_data_set["map"], dtype=float)  
+flat_paths = np.array(train_data_set["paths"], dtype=float)
 
 
-flat_obstacles = [obs for sample in train_data_set["obstacles"] for obs in sample]
-flat_obstacles = np.array(flat_obstacles, dtype=float)  
 
-
-print("flat_start.shape:", flat_start.shape)
-print("flat_goal.shape:", flat_goal.shape)
-print("flat_obstacles.shape:", flat_obstacles.shape)
-# idx = 100
-
-# show(flat_obstacles[idx], start=flat_start[idx], goal=flat_goal[idx])
+idx = 3
+print(flat_paths[idx])
+show(flat_map[idx], path=flat_paths[idx], start=flat_start[idx], goal=flat_goal[idx])
 train_data_set_flatten = {
     "start": flat_start,
     "goal": flat_goal,
-    "obstacles": flat_obstacles,
+    "map": flat_map,
+    "paths": flat_paths,
 }
 
 np.save("train_data_set_flatten.npy", train_data_set_flatten, allow_pickle=True)
