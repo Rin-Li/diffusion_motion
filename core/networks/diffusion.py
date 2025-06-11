@@ -26,7 +26,7 @@ class GaussianDiffusionPB(nn.Module):
                 action_dim, 
                 n_timesteps=1000,
                 loss_type='l2', 
-                clip_denoised=False, 
+                clip_denoised=True, 
                 predict_epsilon=True, 
                 loss_discount=1.0, 
                 loss_weights=None, 
@@ -107,7 +107,7 @@ class GaussianDiffusionPB(nn.Module):
         assert loss_type == 'l2'
         self.loss_fn = Losses['state_l2'](loss_weights)
     
-    def batch_repeat_tensor(x, cond, t, w, n_rp):
+    def batch_repeat_tensor(self, x, cond, t, w, n_rp):
         '''
         deepcopy tensor along batch dim for eval pipeline
         '''
@@ -116,7 +116,7 @@ class GaussianDiffusionPB(nn.Module):
         for k in cond:
             cond_2[k] = cond[k].repeat( (n_rp, 1,) ) # 2d (B,2)
         t = t.repeat( (n_rp,) ) # (B,)
-        w = w.repeat( (n_rp, 1,) ) # 2d
+        w = w.repeat(n_rp, 1, 1, 1)  # shape: [n_rp * B, 1, 8, 8]
 
         return x, cond_2, t, w
 
@@ -176,9 +176,18 @@ class GaussianDiffusionPB(nn.Module):
         x = x.detach()
         
         ## get cond and uncond in one forward
+        print("Before repeat:")
+        print("x", x.shape)
+        print("t", t.shape)
+        print("walls_loc", walls_loc.shape)
         x_2, cond_2, t_2, walls_loc_2 = self.batch_repeat_tensor(x, cond, t, walls_loc, 2)
+        
+        print("After repeat:")
+        print("x_2", x_2.shape)
+        print("t_2", t_2.shape)
+        print("walls_loc_2", walls_loc_2.shape)
         x_2 = x_2.detach()
-        out = self.model(x_2, cond_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
+        out = self.model(x_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
 
         epsilon_cond = out[:len(t), :, :]
         epsilon_uncond = out[len(t):, :, :]
@@ -356,7 +365,7 @@ class GaussianDiffusionPB(nn.Module):
             
             x_2, cond_2, t_2, walls_loc_2 = self.batch_repeat_tensor(x_t, cond, t, walls_loc, 2)
             x_2 = x_2.detach()
-            out = self.model(x_2, cond_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
+            out = self.model(x_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
 
             if mala_sampler:
                 engy = out[0].detach()

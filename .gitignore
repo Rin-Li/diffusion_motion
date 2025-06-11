@@ -1,2 +1,3 @@
-.DS_storetrain_data_set_flatten.npy
-trn_data.joblib
+.DS_store
+train_data_set_flatten.npy
+
