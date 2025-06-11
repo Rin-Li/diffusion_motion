@@ -1,8 +1,7 @@
 class PlaneTestConfig:
     def __init__(self):
         # Dataset
-        self.dataset_path = "train_data_set.npy"
-        self.data_config = {}
+        self.dataset_path = "dataset/train_data_set.npy"
         
         # Model architecture
         self.horizon = 32
@@ -18,10 +17,11 @@ class PlaneTestConfig:
         self.predict_epsilon = True
         self.loss_discount = 1.0
         self.condition_guidance_w = 0.1
+        self.observation_dim = 2
         
         # Training parameters
         self.batch_size = 32
-        self.num_epochs = 1000
+        self.num_epochs = 3
         self.learning_rate = 1e-4
         self.weight_decay = 1e-6
         self.min_lr = 1e-6
@@ -37,7 +37,7 @@ class PlaneTestConfig:
         self.save_freq = 200
         self.save_dir = "./checkpoints"
         
-        self.action_dim = 2
+        self.action_dim = 0
         
         # System
         self.device = "cuda"

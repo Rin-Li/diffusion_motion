@@ -20,7 +20,6 @@ class PlaneDiffusionTrainer:
         # Initialize dataset
         self.dataset = PlanePlanningDataSets(
             dataset_path=config.dataset_path,
-            data_config=config.data_config
         )
         
         self.dataloader = DataLoader(
@@ -34,25 +33,15 @@ class PlaneDiffusionTrainer:
         # Initialize model components
         self.unet = TemporalUnet_WCond(
             horizon=config.horizon,
-            transition_dim=config.observation_dim,  # Only state, no action
-            cond_dim=config.observation_dim,  # Start/goal conditioning
-            dim=config.unet_dim,
-            dim_mults=config.dim_mults,
-            wall_embed_dim=config.wall_embed_dim,
+            transition_dim=config.transition_dim,
             network_config=config.network_config
         ).to(self.device)
         
         self.diffusion = GaussianDiffusionPB(
             model=self.unet,
             horizon=config.horizon,
+            action_dim=config.action_dim,
             observation_dim=config.observation_dim,
-            action_dim=0,  # No actions in this planning task
-            n_timesteps=config.n_timesteps,
-            loss_type=config.loss_type,
-            clip_denoised=config.clip_denoised,
-            predict_epsilon=config.predict_epsilon,
-            loss_discount=config.loss_discount,
-            condition_guidance_w=config.condition_guidance_w,
             diff_config=config.diff_config
         ).to(self.device)
         

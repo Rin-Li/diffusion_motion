@@ -25,6 +25,7 @@ class RRTStarGrid:
         goal_tol: float = 0.5,
         goal_bias: float = 0.1,
         gamma_star: float = 1.5,
+        min_points: int = 32,
         rng=None,
     ):
         self.bounds = np.asarray(bounds, dtype=float)
@@ -49,6 +50,7 @@ class RRTStarGrid:
         self.goal_tol = goal_tol
         self.goal_bias = goal_bias
         self.gamma_star = gamma_star
+        self.min_points = min_points  # for path interpolation
         self.rng = np.random.default_rng(rng)
         self.collet_traing_data = collect_training_data
 
@@ -69,7 +71,7 @@ class RRTStarGrid:
             if path is False:  # smoothing failed (collision)
                 # fall back to pruned (or raw) path
                 path = self._prune_path(np.asarray(raw_path)) if prune else np.asarray(raw_path)
-                path = self._interpolate_path(path, min_points=30)
+                path = self._interpolate_path(path, min_points=self.min_points)
 
         return path
 
@@ -190,12 +192,12 @@ class RRTStarGrid:
         print(path)
         pts = np.asarray(path)
         if len(pts) == 2:                      
-            u = np.linspace(0.0, 1.0, 30)
+            u = np.linspace(0.0, 1.0, self.min_points)
             smoothed = pts[0] + (pts[1] - pts[0]) * u[:, None]
         else:
             k = min(3, len(pts) - 1)
             tck, _ = splprep(pts.T, s=0, k=k)
-            u = np.linspace(0.0, 1.0, 30)       
+            u = np.linspace(0.0, 1.0, self.min_points)       
             coords = splev(u, tck)                   
             smoothed = np.stack(coords, axis=1)        
 
@@ -205,7 +207,7 @@ class RRTStarGrid:
                 return False
         return smoothed
     
-    def _interpolate_path(self, path, min_points=30):
+    def _interpolate_path(self, path, min_points):
         if len(path) >= min_points:
             return path
         

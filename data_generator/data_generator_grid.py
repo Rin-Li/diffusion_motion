@@ -197,17 +197,8 @@ class DataGeneratorGrid:
 
 
 if __name__ == "__main__":
-    gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=10, rng=30)
+    gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=500, rng=30)
     ds, train_data_set = gen.generate_dataset()
     gen.save_train_data("train_data_set.npy")
     train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
 
-    first = ds[6]
-    print(first.path)
-    planner_vis = RRTStarGrid(first.bounds, first.grid, first.cell_size)
-    planner_vis.show(
-        path=first.path,
-        raw_path=first.raw_path,
-        start=first.start,
-        goal=first.goal,
-    )

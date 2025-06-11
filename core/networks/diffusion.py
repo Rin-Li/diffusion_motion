@@ -444,9 +444,9 @@ class GaussianDiffusionPB(nn.Module):
 
 
         if self.energy_mode and self.training:
-            x_recon, engy_batch = self.model(x_noisy, cond, t, walls_loc,)
+            x_recon, engy_batch = self.model(x_noisy, t, walls_loc,)
         else:
-            x_recon = self.model(x_noisy, cond, t, walls_loc,)
+            x_recon = self.model(x_noisy, t, walls_loc,)
 
         if not self.predict_epsilon:
             x_recon = apply_conditioning(x_recon, cond, 0)
@@ -483,6 +483,8 @@ class GaussianDiffusionPB(nn.Module):
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
 
         ## NOTE input to p_losses is the state
+        print("x shape:", x.shape)
+        print("Expected total dim:", self.action_dim + self.observation_dim)
         diffuse_loss, info = self.p_losses(x[:, :, self.action_dim:], 
                                             cond, t, wall_locations,)
         

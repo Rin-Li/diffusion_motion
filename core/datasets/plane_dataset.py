@@ -37,14 +37,14 @@ def denormalize_data(data: torch.Tensor, stats):
     denorm = denorm.reshape(n, T, d)
     return denorm
 
-Batch = namedtuple('Batch', 'start goal path map')
+Batch = namedtuple('Batch', 'start goal path obstacles')
 class PlanePlanningDataSets(torch.utils.data.Dataset):
     def __init__(self, dataset_path: str):
         self.data = np.load(dataset_path, allow_pickle=True).item()
         self.paths = torch.tensor(self.data['paths'], dtype=torch.float32)
         self.start = torch.tensor(self.data['start'], dtype=torch.float32)
         self.goal = torch.tensor(self.data['goal'], dtype= torch.float32)
-        self.obstacles = torch.tensor(self.data['map'], dtype=torch.float32)
+        self.obstacles = torch.tensor(self.data['map'], dtype=torch.float32).unsqueeze(1)
         stats = get_data_stats(self.paths)
         self.paths = normalize_data(self.paths, stats)
         

@@ -233,6 +233,7 @@ class TemporalUnet_WCond(nn.Module):
 
     def forward(self, x, time, walls_loc, use_dropout=True, 
                 force_dropout=False, half_fd=False,):
+
         '''
             x : [ batch x horizon x transition ]
             time: [batch,]
@@ -252,8 +253,7 @@ class TemporalUnet_WCond(nn.Module):
         ## what we want is like [B, dim], use the cls_token if vit1d
 
         ## drop concept only when training, rand uniform [0, 1)
-        if use_dropout:
-            assert self.training
+        if use_dropout and self.training:
             b = w.shape[0]
             w[np.random.rand(b,) < self.concept_drop_prob] = 0.
 
