@@ -5,8 +5,8 @@ class PlaneTestConfig:
         self.data_config = {}
         
         # Model architecture
-        self.horizon = 30
-        self.observation_dim = 2  # x, y coordinates
+        self.horizon = 32
+        self.transition_dim = 2  # x, y coordinates
         self.unet_dim = 64
         self.dim_mults = (1, 2, 4, 8)
         self.wall_embed_dim = 32
@@ -37,6 +37,8 @@ class PlaneTestConfig:
         self.save_freq = 200
         self.save_dir = "./checkpoints"
         
+        self.action_dim = 2
+        
         # System
         self.device = "cuda"
         self.num_workers = 4
@@ -48,9 +50,10 @@ class PlaneTestConfig:
             'use_downup_sample': True,
             'energy_mode': False,
             'concept_drop_prob': 0.1,
-            'vit1d_config': {
-                'image_size': 64,  # Assuming 64x64 obstacle grid
-                'patch_size': 8,
+            'vit_config': {
+                'image_size': 8,  
+                'patch_size': 4,
+                'channels': 1,
                 'num_classes': self.wall_embed_dim,
                 'dim': 512,
                 'depth': 6,

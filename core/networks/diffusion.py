@@ -4,7 +4,6 @@ from torch import nn
 import torch.nn.functional as F
 import pdb
 
-import core.utils as utils
 from .helpers import (
     cosine_beta_schedule,
     extract,
@@ -13,7 +12,6 @@ from .helpers import (
     Losses,
 )
 import matplotlib.pyplot as plt
-from core.utils.luo_utils import plot_xy, batch_repeat_tensor
 from colorama import Fore
 
 class GaussianDiffusionPB(nn.Module):
@@ -108,6 +106,19 @@ class GaussianDiffusionPB(nn.Module):
         loss_weights = self.get_loss_weights(loss_discount)
         assert loss_type == 'l2'
         self.loss_fn = Losses['state_l2'](loss_weights)
+    
+    def batch_repeat_tensor(x, cond, t, w, n_rp):
+        '''
+        deepcopy tensor along batch dim for eval pipeline
+        '''
+        x = x.repeat( (n_rp, 1, 1) )
+        cond_2 = {}
+        for k in cond:
+            cond_2[k] = cond[k].repeat( (n_rp, 1,) ) # 2d (B,2)
+        t = t.repeat( (n_rp,) ) # (B,)
+        w = w.repeat( (n_rp, 1,) ) # 2d
+
+        return x, cond_2, t, w
 
     def get_loss_weights(self, discount):
         '''
@@ -165,7 +176,7 @@ class GaussianDiffusionPB(nn.Module):
         x = x.detach()
         
         ## get cond and uncond in one forward
-        x_2, cond_2, t_2, walls_loc_2 = batch_repeat_tensor(x, cond, t, walls_loc, 2)
+        x_2, cond_2, t_2, walls_loc_2 = self.batch_repeat_tensor(x, cond, t, walls_loc, 2)
         x_2 = x_2.detach()
         out = self.model(x_2, cond_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
 
@@ -218,7 +229,7 @@ class GaussianDiffusionPB(nn.Module):
 
             x_recon.clamp_(-1., 1.)
         else:
-            utils.print_color('x_recon not clip')
+            print("???")
 
         b, *_, device = *x.shape, x.device
         model_mean, _, model_log_variance = self.q_posterior(
@@ -258,9 +269,10 @@ class GaussianDiffusionPB(nn.Module):
         x = apply_conditioning(x, cond, 0) # start from dim 0, different from d
 
         if return_diffusion: diffusion = [x]
-
-        progress = utils.Progress(self.n_timesteps) if verbose else utils.Silent()
+        
+        step = 0
         for i in reversed(range(0, self.n_timesteps)):
+            print(f'{Fore.YELLOW}p_sample_loop step {step} / {self.n_timesteps} {Fore.RESET}', end='\r')
             timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
             walls_loc = walls_loc.to(device)
             x = self.p_sample(x, cond, timesteps, walls_loc,)
@@ -272,8 +284,6 @@ class GaussianDiffusionPB(nn.Module):
             x = x.detach()
 
             if return_diffusion: diffusion.append(x)
-
-        progress.close()
 
         if return_diffusion:
             return x, torch.stack(diffusion, dim=1)
@@ -344,7 +354,7 @@ class GaussianDiffusionPB(nn.Module):
         with torch.set_grad_enabled(self.energy_mode):
             x_t.detach_()
             
-            x_2, cond_2, t_2, walls_loc_2 = batch_repeat_tensor(x_t, cond, t, walls_loc, 2)
+            x_2, cond_2, t_2, walls_loc_2 = self.batch_repeat_tensor(x_t, cond, t, walls_loc, 2)
             x_2 = x_2.detach()
             out = self.model(x_2, cond_2, t_2, walls_loc_2, use_dropout=False, force_dropout=True, half_fd=True)
 
@@ -556,7 +566,6 @@ class GaussianDiffusionPB(nn.Module):
 
     def ddim_p_sample_loop(self, shape, cond, walls_loc, verbose=True, return_diffusion=False):
         
-        utils.print_color(f'ddim steps: {self.ddim_num_inference_steps}', c='y')
         
         device = self.betas.device
         batch_size = shape[0]

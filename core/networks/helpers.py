@@ -7,11 +7,14 @@ import einops
 from einops.layers.torch import Rearrange
 import pdb
 
-import core.utils as utils
 
 #-----------------------------------------------------------------------------#
 #---------------------------------- modules ----------------------------------#
 #-----------------------------------------------------------------------------#
+def to_np(x):
+	if torch.is_tensor(x):
+		x = x.detach().cpu().numpy()
+	return x
 
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
@@ -223,8 +226,8 @@ class ValueLoss(nn.Module):
 
         if len(pred) > 1:
             corr = np.corrcoef(
-                utils.to_np(pred).squeeze(),
-                utils.to_np(targ).squeeze()
+                to_np(pred).squeeze(),
+                to_np(targ).squeeze()
             )[0,1]
         else:
             corr = np.NaN

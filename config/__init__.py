@@ -1,1 +1,1 @@
-from plane_test import PlaneTestConfig
+from .plane_test import PlaneTestConfig

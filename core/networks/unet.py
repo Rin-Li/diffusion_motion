@@ -3,7 +3,6 @@ import torch.nn as nn
 import einops
 from einops.layers.torch import Rearrange
 import pdb
-import core.utils as utils
 
 from .helpers import (
     SinusoidalPosEmb,
@@ -16,6 +15,25 @@ from .helpers import (
 from .vit import ViT
 import numpy as np
 from .block import ResidualTemporalBlock_dd
+from colorama import Fore
+
+def print_color(s, *args, c='r'):
+    if c == 'r':
+        # print(Fore.RED + s + Fore.RESET)
+        print(Fore.RED, end='')
+        print(s, *args, Fore.RESET)
+    elif c == 'b':
+        # print(Fore.BLUE + s + Fore.RESET)
+        print(Fore.BLUE, end='')
+        print(s, *args, Fore.RESET)
+    elif c == 'y':
+        # print(Fore.YELLOW + s + Fore.RESET)
+        print(Fore.YELLOW, end='')
+        print(s, *args, Fore.RESET)
+    else:
+        # print(Fore.CYAN + s + Fore.RESET)
+        print(Fore.CYAN, end='')
+        print(s, *args, Fore.RESET)
 
 
 class ResidualTemporalBlock_WCond(nn.Module):
@@ -68,7 +86,6 @@ class TemporalUnet_WCond(nn.Module):
         self,
         horizon,
         transition_dim,
-        cond_dim,
         dim=32, # may use 64
         dim_mults=(1, 2, 4, 8),
         wall_embed_dim=32,
@@ -86,7 +103,6 @@ class TemporalUnet_WCond(nn.Module):
         dims = [transition_dim, *map(lambda m: dim * m, dim_mults)]
         ## [(64,128), (128,256), (256,512)]
         in_out = list(zip(dims[:-1], dims[1:]))
-        utils.print_color(f'[ models/temporal_cond ] Channel dimensions: {in_out}', c='c')
 
         ## --------- init MLP for time / wall ---------
         ## cat the vector embedding of time and wall before feeding to the MLP
@@ -146,10 +162,10 @@ class TemporalUnet_WCond(nn.Module):
         print(f'[TemporalUnet_WCond] time_dim: {time_dim}')
         
 
-        self.vit1d_config = network_config['vit1d_config']
+        self.vit_config = network_config['vit_config']
         print('[TemporalUnet_WCond] construct ViT1D as wall loc encoder')
-        print(f'self.vit1d_config: {self.vit1d_config}')
-        self.wallLoc_encoder = ViT(**self.vit1d_config)
+        print(f'self.vit1d_config: {self.vit_config}')
+        self.wallLoc_encoder = ViT(**self.vit_config)
         
 
 
@@ -165,7 +181,7 @@ class TemporalUnet_WCond(nn.Module):
         
 
         self.down_times = network_config.get('down_times', 1e5)
-        utils.print_color(f'[Unet down_times] {self.down_times}', c='c')
+        print_color(f'[Unet down_times] {self.down_times}', c='c')
         ## default in_out: [(64,128), (128,256), (256,512)]
         for ind, (dim_in, dim_out) in enumerate(in_out):
             # is_last = ind >= (num_resolutions - 1)
@@ -215,7 +231,7 @@ class TemporalUnet_WCond(nn.Module):
 
 
 
-    def forward(self, x, cond, time, walls_loc, use_dropout=True, 
+    def forward(self, x, time, walls_loc, use_dropout=True, 
                 force_dropout=False, half_fd=False,):
         '''
             x : [ batch x horizon x transition ]
