@@ -59,3 +59,8 @@ class PlanePlanningDataSets(torch.utils.data.Dataset):
                       self.obstacles[idx])
         return bacth
 
+
+def main():
+    dataset = np.load('data/train_data_set.npy', allow_pickle=True).item()
+    stats = get_data_stats(torch.tensor(dataset['paths'], dtype=torch.float32))
+    torch.save(stats, 'dataset/stats.pt')
