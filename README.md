@@ -14,8 +14,8 @@ This project demonstrates **2D trajectory generation using a conditional diffusi
 
 
 ##  Model Architecture
-
-We propose a **conditional diffusion model** for 2D path planning. The core components are:
+![](all_step.png)
+A **conditional diffusion model** for 2D path planning. The core components are:
 
 -  **Start & Goal Encoding**  
   The start and goal positions are concatenated and passed through a **Multi-Layer Perceptron (MLP)** to produce a compact feature embedding.
