@@ -174,11 +174,61 @@ class DataGeneratorGrid:
     def _index_in_bounds(self, idx: np.ndarray, grid) -> bool:
         return np.all(idx >= 0) and np.all(idx < grid.shape)
     
+    # def in_collision(self, point: np.ndarray, grid) -> bool:
+    #     idx = self._to_index(point)
+    #     if not self._index_in_bounds(idx, grid):
+    #         return True  
+        
+    #   
+    #     for di in [-1, 0, 1]:
+    #         for dj in [-1, 0, 1]:
+    #             check_idx = idx + np.array([di, dj])
+    #             if self._index_in_bounds(check_idx, grid):
+    #                 if grid[tuple(check_idx)]:
+    # 
+    #                     cell_center = (check_idx + 0.5) * self.resolution + self.origin
+    #                     if np.linalg.norm(point - cell_center) < self.resolution * 0.5:
+    #                         return True
+    #     return False
+    
     def in_collision(self, point: np.ndarray, grid) -> bool:
+
         idx = self._to_index(point)
         if not self._index_in_bounds(idx, grid):
             return True  
-        return bool(grid[tuple(idx)])
+        if grid[tuple(idx)]:
+            return True
+        
+
+        offset_scale = self.resolution * 0.1  
+        offsets = [
+            [0, 0],                                  
+            [offset_scale, 0],                  
+            [-offset_scale, 0],                  
+            [0, offset_scale],                 
+            [0, -offset_scale],               
+            [offset_scale, offset_scale],         
+            [-offset_scale, offset_scale],       
+            [offset_scale, -offset_scale],        
+            [-offset_scale, -offset_scale],           
+            [offset_scale * 0.5, offset_scale * 0.5],
+            [-offset_scale * 0.5, -offset_scale * 0.5],
+            [offset_scale * 0.5, -offset_scale * 0.5],
+            [-offset_scale * 0.5, offset_scale * 0.5],
+        ]
+        
+        for offset in offsets:
+            test_point = point + np.array(offset)
+            test_idx = self._to_index(test_point)
+            
+            if not self._index_in_bounds(test_idx, grid):
+                continue 
+                
+            if grid[tuple(test_idx)]:
+                return True 
+        
+        return False
+
 
     def _sample_start_goal(self, grid):
         xmin, ymin = self.bounds[:, 0]
@@ -197,7 +247,7 @@ class DataGeneratorGrid:
 
 
 if __name__ == "__main__":
-    gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=500, rng=30)
+    gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=100, rng=30)
     ds, train_data_set = gen.generate_dataset()
     gen.save_train_data("train_data_set.npy")
     train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()

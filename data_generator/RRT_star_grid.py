@@ -54,9 +54,7 @@ class RRTStarGrid:
         self.rng = np.random.default_rng(rng)
         self.collet_traing_data = collect_training_data
 
-
     def plan(self, start, goal, *, prune: bool = False, optimize: bool = False, interp_points: int = 50):
-        
         raw_path = self._plan_raw(np.asarray(start), np.asarray(goal))
         if raw_path is None:
             return None  # planning failure
@@ -65,13 +63,23 @@ class RRTStarGrid:
 
         if prune:
             path = self._prune_path(path)
+            # purning
+            if not self._validate_path_collision_free(path):
+                print("Warning: Pruned path has collisions, using raw path")
+                path = np.asarray(raw_path)
 
         if optimize:
-            path = self._smooth_path(path, interp_points)
-            if path is False:  # smoothing failed (collision)
-                # fall back to pruned (or raw) path
-                path = self._prune_path(np.asarray(raw_path)) if prune else np.asarray(raw_path)
+            smoothed = self._smooth_path(path, interp_points)
+            if smoothed is not False:
+                path = smoothed
+            else:
+
                 path = self._interpolate_path(path, min_points=self.min_points)
+
+
+        if not self._validate_path_collision_free(path):
+            print("Warning: Final path has collisions!")
+            return None
 
         return path
 
@@ -136,7 +144,6 @@ class RRTStarGrid:
     
     # Prune the path by removing unnecessary points
     def _prune_path(self, path: np.ndarray) -> np.ndarray:
-
         if path.shape[0] < 3:
             return path  # nothing to prune
 
@@ -155,22 +162,90 @@ class RRTStarGrid:
     def _index_in_bounds(self, idx: np.ndarray) -> bool:
         return np.all(idx >= 0) and np.all(idx < self.grid.shape)
     
+    # def in_collision(self, point: np.ndarray) -> bool:
+    #     idx = self._to_index(point)
+    #     if not self._index_in_bounds(idx):
+    #         return True  
+        
+    #     # 检查点周围的网格单元（考虑浮点误差）
+    #     for di in [-1, 0, 1]:
+    #         for dj in [-1, 0, 1]:
+    #             check_idx = idx + np.array([di, dj])
+    #             if self._index_in_bounds(check_idx):
+    #                 if self.grid[tuple(check_idx)]:
+    #                     # 检查实际距离
+    #                     cell_center = (check_idx + 0.5) * self.cell_size + self.origin
+    #                     if np.linalg.norm(point - cell_center) < self.cell_size * 0.5:
+    #                         return True
+    #     return False
+    
     def in_collision(self, point: np.ndarray) -> bool:
+        # 原始点检查
         idx = self._to_index(point)
         if not self._index_in_bounds(idx):
             return True  
-        return bool(self.grid[tuple(idx)])
+        if self.grid[tuple(idx)]:
+            return True
+        
+        # Offset
+        offset_scale = self.cell_size * 0.1  
+        offsets = [
+            [0, 0],                                    
+            [offset_scale, 0],                         
+            [-offset_scale, 0],                      
+            [0, offset_scale],                    
+            [0, -offset_scale],                    
+            [offset_scale, offset_scale],           
+            [-offset_scale, offset_scale],          
+            [offset_scale, -offset_scale],          
+            [-offset_scale, -offset_scale],            
+            [offset_scale * 0.5, offset_scale * 0.5], 
+            [-offset_scale * 0.5, -offset_scale * 0.5],
+            [offset_scale * 0.5, -offset_scale * 0.5],
+            [-offset_scale * 0.5, offset_scale * 0.5],
+        ]
+        
+        for offset in offsets:
+            test_point = point + np.array(offset)
+            test_idx = self._to_index(test_point)
+            
+            if not self._index_in_bounds(test_idx):
+                continue 
+                
+            if self.grid[tuple(test_idx)]:
+                return True  
+        
+        return False
 
     def _segment_in_collision(self, a: np.ndarray, b: np.ndarray) -> bool:
         dist = np.linalg.norm(b - a)
         if dist == 0.0:
             return self.in_collision(a)
-        n = int(dist / (self.cell_size * 0.5)) + 1 
+        
+        n = int(dist / (self.cell_size * 0.25)) + 1
+        n = max(n, 100)
+        
         for t in np.linspace(0.0, 1.0, n):
             p = a + t * (b - a)
             if self.in_collision(p):
                 return True
         return False
+
+    def _validate_path_collision_free(self, path: np.ndarray) -> bool:
+        if len(path) < 2:
+            return True
+        
+        # Check if the path is within bounds
+        for point in path:
+            if self.in_collision(point):
+                return False
+        
+        # Check if each segment of the path is collision-free
+        for i in range(len(path) - 1):
+            if self._segment_in_collision(path[i], path[i + 1]):
+                return False
+        
+        return True
 
     def _sample_free(self) -> np.ndarray:
         for _ in range(1000):
@@ -189,7 +264,7 @@ class RRTStarGrid:
     def _smooth_path(self, path, n_interp):
         if path is None or len(path) < 2:
             return path
-        print(path)
+        
         pts = np.asarray(path)
         if len(pts) == 2:                      
             u = np.linspace(0.0, 1.0, self.min_points)
@@ -201,10 +276,10 @@ class RRTStarGrid:
             coords = splev(u, tck)                   
             smoothed = np.stack(coords, axis=1)        
 
-        # collision check
-        for p, q in zip(smoothed[:-1], smoothed[1:]):
-            if self._segment_in_collision(p, q):
-                return False
+        # Collision check
+        if not self._validate_path_collision_free(smoothed):
+            return False
+        
         return smoothed
     
     def _interpolate_path(self, path, min_points):
@@ -246,7 +321,14 @@ class RRTStarGrid:
         else:
             interpolated_path[-1] = path[-1]
         
-        return np.array(interpolated_path)
+        result = np.array(interpolated_path)
+        
+        # Check collision
+        if not self._validate_path_collision_free(result):
+
+            return path
+        
+        return result
 
     def show(self, path=None, raw_path=None, start=None, goal=None, figsize=(6, 6)):
         nx, ny = self.grid.shape
@@ -289,12 +371,12 @@ class RRTStarGrid:
 
 
 if __name__ == "__main__":
-    bounds = [(0.0, 24.0), (0.0, 24.0)]
+    bounds = [(0.0, 8.0), (0.0, 8.0)]
     cell = 1
     nx, ny = (int((b[1] - b[0]) / cell) for b in bounds)
     grid = np.zeros((nx, ny), dtype=bool)
 
-    obstacles = [(np.array([8.5, 5.0]), 1.5), (np.array([10.0, 10.0]), 1.0)]
+    obstacles = [(np.array([4.0, 5.0]), 1.5), (np.array([10.0, 10.0]), 1.0)]
     Xs = (np.arange(nx) + 0.5) * cell + bounds[0][0]
     Ys = (np.arange(ny) + 0.5) * cell + bounds[1][0]
     XX, YY = np.meshgrid(Xs, Ys, indexing="ij")
@@ -303,15 +385,11 @@ if __name__ == "__main__":
         grid[mask] = True
 
     planner = RRTStarGrid(bounds, grid, cell, max_iter=200, step_size=0.5, goal_tol=0.3)
-    start, goal = np.array([1.0, 1.0]), np.array([20.0, 20.0])
-
+    start, goal = np.array([1.0, 1.0]), np.array([7.0, 7.0])
 
     path = planner.plan(start, goal, prune=True, optimize=True, interp_points=100)
     
-    
-
     if path is None:
         print("No path found.")
     else:
-        raw_path = planner._plan_raw(start, goal)
-        planner.show(path=path, raw_path=raw_path, start=start, goal=goal)
+        planner.show(path=path, start=start, goal=goal)
