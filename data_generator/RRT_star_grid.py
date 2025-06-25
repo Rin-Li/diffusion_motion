@@ -167,20 +167,19 @@ class RRTStarGrid:
     #     if not self._index_in_bounds(idx):
     #         return True  
         
-    #     # 检查点周围的网格单元（考虑浮点误差）
+    #   
     #     for di in [-1, 0, 1]:
     #         for dj in [-1, 0, 1]:
     #             check_idx = idx + np.array([di, dj])
     #             if self._index_in_bounds(check_idx):
     #                 if self.grid[tuple(check_idx)]:
-    #                     # 检查实际距离
+    #              
     #                     cell_center = (check_idx + 0.5) * self.cell_size + self.origin
     #                     if np.linalg.norm(point - cell_center) < self.cell_size * 0.5:
     #                         return True
     #     return False
     
     def in_collision(self, point: np.ndarray) -> bool:
-        # 原始点检查
         idx = self._to_index(point)
         if not self._index_in_bounds(idx):
             return True  
