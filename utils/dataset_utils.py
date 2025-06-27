@@ -9,9 +9,9 @@ def index_in_bounds(idx: np.ndarray, grid) -> bool:
     return np.all(idx >= 0) and np.all(idx < grid.shape)
 
 
-def in_collision(point: np.ndarray, grid, cell_size) -> bool:
+def in_collision(point: np.ndarray, grid, cell_size, origin) -> bool:
 
-    idx = to_index(point)
+    idx = to_index(point, cell_size, origin)
     if not index_in_bounds(idx, grid):
         return True  
     if grid[tuple(idx)]:
@@ -37,7 +37,7 @@ def in_collision(point: np.ndarray, grid, cell_size) -> bool:
     
     for offset in offsets:
         test_point = point + np.array(offset)
-        test_idx = to_index(test_point)
+        test_idx = to_index(test_point, cell_size, origin)
         
         if not index_in_bounds(test_idx, grid):
             continue 
@@ -47,7 +47,7 @@ def in_collision(point: np.ndarray, grid, cell_size) -> bool:
     
     return False
 
-def sample_start_goal(bounds, grid, rng):
+def sample_start_goal(bounds, grid, cell_size, origin, rng):
     xmin, ymin = bounds[:, 0]
     xmax, ymax = bounds[:, 1]
     for _ in range(1000):
@@ -55,7 +55,7 @@ def sample_start_goal(bounds, grid, rng):
         goal = rng.uniform([xmin, ymin], [xmax, ymax])
         if np.linalg.norm(start - goal) < 1.0:
             continue
-        if in_collision(start, grid) or in_collision(goal, grid):
+        if in_collision(start, grid, cell_size, origin) or in_collision(goal, grid, cell_size, origin):
             continue
         return start, goal
     raise RuntimeError("Could not sample valid start/goal after many tries.")

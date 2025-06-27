@@ -3,6 +3,7 @@ from math import log
 import matplotlib.pyplot as plt
 
 from scipy.interpolate import splprep, splev  
+from utils.dataset_utils import in_collision
 
 class RRTStarGrid:
     class _Node:
@@ -86,7 +87,7 @@ class RRTStarGrid:
     # Private
     # Original plane
     def _plan_raw(self, start: np.ndarray, goal: np.ndarray):
-        if self.in_collision(start) or self.in_collision(goal):
+        if in_collision(start, self.grid, self.cell_size, self.origin) or in_collision(goal, self.grid, self.cell_size, self.origin):
             raise ValueError("Start or goal is inside an obstacle / outside grid.")
 
         nodes = [self._Node(start)]
@@ -179,54 +180,18 @@ class RRTStarGrid:
     #                         return True
     #     return False
     
-    def in_collision(self, point: np.ndarray) -> bool:
-        idx = self._to_index(point)
-        if not self._index_in_bounds(idx):
-            return True  
-        if self.grid[tuple(idx)]:
-            return True
-        
-        # Offset
-        offset_scale = self.cell_size * 0.1  
-        offsets = [
-            [0, 0],                                    
-            [offset_scale, 0],                         
-            [-offset_scale, 0],                      
-            [0, offset_scale],                    
-            [0, -offset_scale],                    
-            [offset_scale, offset_scale],           
-            [-offset_scale, offset_scale],          
-            [offset_scale, -offset_scale],          
-            [-offset_scale, -offset_scale],            
-            [offset_scale * 0.5, offset_scale * 0.5], 
-            [-offset_scale * 0.5, -offset_scale * 0.5],
-            [offset_scale * 0.5, -offset_scale * 0.5],
-            [-offset_scale * 0.5, offset_scale * 0.5],
-        ]
-        
-        for offset in offsets:
-            test_point = point + np.array(offset)
-            test_idx = self._to_index(test_point)
-            
-            if not self._index_in_bounds(test_idx):
-                continue 
-                
-            if self.grid[tuple(test_idx)]:
-                return True  
-        
-        return False
 
     def _segment_in_collision(self, a: np.ndarray, b: np.ndarray) -> bool:
         dist = np.linalg.norm(b - a)
         if dist == 0.0:
-            return self.in_collision(a)
+            return in_collision(a, self.grid, self.cell_size, self.origin)
         
         n = int(dist / (self.cell_size * 0.25)) + 1
-        n = max(n, 100)
+        n = max(n, 10)
         
         for t in np.linspace(0.0, 1.0, n):
             p = a + t * (b - a)
-            if self.in_collision(p):
+            if in_collision(p, self.grid, self.cell_size, self.origin):
                 return True
         return False
 
@@ -236,7 +201,7 @@ class RRTStarGrid:
         
         # Check if the path is within bounds
         for point in path:
-            if self.in_collision(point):
+            if in_collision(point, self.grid, self.cell_size, self.origin):
                 return False
         
         # Check if each segment of the path is collision-free
@@ -249,7 +214,7 @@ class RRTStarGrid:
     def _sample_free(self) -> np.ndarray:
         for _ in range(1000):
             x = self.rng.uniform(self.bounds[:, 0], self.bounds[:, 1])
-            if not self.in_collision(x):
+            if not in_collision(x, self.grid, self.cell_size, self.origin):
                 return x
         raise RuntimeError("Failed to sample a free point – maybe the map is full?")
 

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import torch
+# import torch
 
 def show(grid, path, start, goal, figsize=(6, 6)):
     grid = np.array(grid)  
@@ -42,13 +42,21 @@ def show(grid, path, start, goal, figsize=(6, 6)):
 def show_multiple(grid_list, path_list, start_list, goal_list, indices, cols=10):
     rows = (len(indices) + cols - 1) // cols
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
-    axes = axes.flatten() if rows > 1 else [axes] if rows == 1 else []
+    
+    # Fix the axes handling
+    if rows == 1 and cols == 1:
+        axes = [axes]  # Single subplot case
+    elif rows == 1:
+        axes = axes  # Single row case - axes is already 1D array
+    else:
+        axes = axes.flatten()  # Multiple rows case
     
     for i, idx in enumerate(indices):
-        ax = axes[i] if i < len(axes) else None
-        if ax is None:
+        if i >= len(axes):
             break
             
+        ax = axes[i]
+        
         grid = np.array(grid_list[idx])
         path = np.array(path_list[idx])  
         start = np.array(start_list[idx])
@@ -64,7 +72,6 @@ def show_multiple(grid_list, path_list, start_list, goal_list, indices, cols=10)
         ax.set_ylim(bounds[1])
         ax.set_title(f"Sample {idx}")
         
-
         xs = np.arange(nx) * cell_size + origin[0]
         ys = np.arange(ny) * cell_size + origin[1]
         for ix in range(nx):
@@ -79,13 +86,12 @@ def show_multiple(grid_list, path_list, start_list, goal_list, indices, cols=10)
                     )
                     ax.add_patch(rect)
         
-
         ax.plot(path[:, 0], path[:, 1], "b-", lw=1)
         ax.plot(start[0], start[1], "go", ms=4)
         ax.plot(goal[0], goal[1], "ro", ms=4)
         ax.grid(True, alpha=0.3)
     
-
+    # Hide unused subplots
     for i in range(len(indices), len(axes)):
         axes[i].set_visible(False)
     
