@@ -61,6 +61,7 @@ def show_multiple(grid_list, path_list, start_list, goal_list, indices, cols=10)
         path = np.array(path_list[idx])  
         start = np.array(start_list[idx])
         goal = np.array(goal_list[idx])
+        print("Path", path.shape, "Start", start, "Goal", goal)
         
         nx, ny = grid.shape[0], grid.shape[1]
         cell_size = 1
