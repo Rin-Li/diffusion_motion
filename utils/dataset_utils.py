@@ -99,3 +99,34 @@ def rectangles_to_grid(nx, ny, bounds, cell_size, rects: List[Tuple[float, float
         mask = (XX >= x0) & (XX <= x0 + w) & (YY >= y0) & (YY <= y0 + h)
         grid[mask] = True
     return grid
+
+
+def segment_in_collision(a: np.ndarray, b: np.ndarray, grid, cell_size, origin) -> bool:
+    dist = np.linalg.norm(b - a)
+    if dist == 0.0:
+        return in_collision(a, grid, cell_size, origin)
+    
+    n = int(dist / (cell_size * 0.25)) + 1
+    n = max(n, 10)
+    
+    for t in np.linspace(0.0, 1.0, n):
+        p = a + t * (b - a)
+        if in_collision(p, grid, cell_size, origin):
+            return True
+    return False
+
+def validate_path_collision_free(path: np.ndarray, grid, cell_size, origin) -> bool:
+    if len(path) < 2:
+        return True
+    
+    # Check if the path is within bounds
+    for point in path:
+        if in_collision(point, grid, cell_size, origin):
+            return False
+    
+    # Check if each segment of the path is collision-free
+    for i in range(len(path) - 1):
+        if segment_in_collision(path[i], path[i + 1], grid, cell_size, origin):
+            return False
+    
+    return True

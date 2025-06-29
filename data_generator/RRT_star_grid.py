@@ -3,7 +3,7 @@ from math import log
 import matplotlib.pyplot as plt
 
 from scipy.interpolate import splprep, splev  
-from utils.dataset_utils import in_collision
+from utils.dataset_utils import in_collision, segment_in_collision, validate_path_collision_free
 
 class RRTStarGrid:
     class _Node:
@@ -65,7 +65,7 @@ class RRTStarGrid:
         if prune:
             path = self._prune_path(path)
             # purning
-            if not self._validate_path_collision_free(path):
+            if not validate_path_collision_free(path, self.grid, self.cell_size, self.origin):
                 print("Warning: Pruned path has collisions, using raw path")
                 path = np.asarray(raw_path)
 
@@ -78,7 +78,7 @@ class RRTStarGrid:
                 path = self._interpolate_path(path, min_points=self.min_points)
 
 
-        if not self._validate_path_collision_free(path):
+        if not validate_path_collision_free(path, self.grid, self.cell_size, self.origin):
             print("Warning: Final path has collisions!")
             return None
 
@@ -99,7 +99,7 @@ class RRTStarGrid:
             node_near = min(nodes, key=lambda n: np.linalg.norm(n.x - x_rand))
             x_new = self._steer(node_near.x, x_rand)
             # Collect the traning dataset
-            if self._segment_in_collision(node_near.x, x_new):
+            if segment_in_collision(node_near.x, x_new, self.grid, self.cell_size, self.origin):
                 continue
 
             r_n = min(self.gamma_star * (log(it) / it) ** (1 / self.dim), self.step_size * 2)
@@ -107,7 +107,7 @@ class RRTStarGrid:
                 idx
                 for idx, n in enumerate(nodes)
                 if np.linalg.norm(n.x - x_new) <= r_n
-                and not self._segment_in_collision(n.x, x_new)
+                and not segment_in_collision(n.x, x_new, self.grid, self.cell_size, self.origin)
             ]
             parent_idx = min(
                 neighbour_ids or [nodes.index(node_near)],
@@ -122,11 +122,11 @@ class RRTStarGrid:
             for idx in neighbour_ids:
                 nbr = nodes[idx]
                 potential = new_node.cost + np.linalg.norm(nbr.x - x_new)
-                if potential < nbr.cost and not self._segment_in_collision(nbr.x, x_new):
+                if potential < nbr.cost and not segment_in_collision(nbr.x, x_new, self.grid, self.cell_size, self.origin):
                     nbr.parent, nbr.cost = new_node, potential
 
             # goal check
-            if np.linalg.norm(x_new - goal) <= self.goal_tol and not self._segment_in_collision(x_new, goal):
+            if np.linalg.norm(x_new - goal) <= self.goal_tol and not segment_in_collision(x_new, goal, self.grid, self.cell_size, self.origin):
                 g_cost = new_node.cost + np.linalg.norm(x_new - goal)
                 if best_goal_node is None or g_cost < best_goal_node.cost:
                     best_goal_node = self._Node(goal, parent=new_node, cost=g_cost)
@@ -151,17 +151,12 @@ class RRTStarGrid:
         pruned = [path[0]]
         anchor = path[0]
         for i in range(2, path.shape[0]):
-            if self._segment_in_collision(anchor, path[i]):
+            if segment_in_collision(anchor, path[i], self.grid, self.cell_size, self.origin):
                 pruned.append(path[i - 1])
                 anchor = path[i - 1]
         pruned.append(path[-1])
         return np.asarray(pruned)
 
-    def _to_index(self, point: np.ndarray) -> np.ndarray:
-        return np.floor((point - self.origin) / self.cell_size).astype(int)
-
-    def _index_in_bounds(self, idx: np.ndarray) -> bool:
-        return np.all(idx >= 0) and np.all(idx < self.grid.shape)
     
     # def in_collision(self, point: np.ndarray) -> bool:
     #     idx = self._to_index(point)
@@ -179,37 +174,6 @@ class RRTStarGrid:
     #                     if np.linalg.norm(point - cell_center) < self.cell_size * 0.5:
     #                         return True
     #     return False
-    
-
-    def _segment_in_collision(self, a: np.ndarray, b: np.ndarray) -> bool:
-        dist = np.linalg.norm(b - a)
-        if dist == 0.0:
-            return in_collision(a, self.grid, self.cell_size, self.origin)
-        
-        n = int(dist / (self.cell_size * 0.25)) + 1
-        n = max(n, 10)
-        
-        for t in np.linspace(0.0, 1.0, n):
-            p = a + t * (b - a)
-            if in_collision(p, self.grid, self.cell_size, self.origin):
-                return True
-        return False
-
-    def _validate_path_collision_free(self, path: np.ndarray) -> bool:
-        if len(path) < 2:
-            return True
-        
-        # Check if the path is within bounds
-        for point in path:
-            if in_collision(point, self.grid, self.cell_size, self.origin):
-                return False
-        
-        # Check if each segment of the path is collision-free
-        for i in range(len(path) - 1):
-            if self._segment_in_collision(path[i], path[i + 1]):
-                return False
-        
-        return True
 
     def _sample_free(self) -> np.ndarray:
         for _ in range(1000):
@@ -241,7 +205,7 @@ class RRTStarGrid:
             smoothed = np.stack(coords, axis=1)        
 
         # Collision check
-        if not self._validate_path_collision_free(smoothed):
+        if not validate_path_collision_free(smoothed, self.grid, self.cell_size, self.origin):
             return False
         
         return smoothed
@@ -288,7 +252,7 @@ class RRTStarGrid:
         result = np.array(interpolated_path)
         
         # Check collision
-        if not self._validate_path_collision_free(result):
+        if not validate_path_collision_free(result, self.grid, self.cell_size, self.origin):
 
             return path
         
