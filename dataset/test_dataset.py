@@ -117,7 +117,7 @@ print(f"Sample {idx} path shape:", np.array(flat_paths[idx]).shape)
 show(flat_map[idx], np.array(flat_paths[idx]), np.array(flat_start[idx]), np.array(flat_goal[idx]))
 
 
-indices = list(range(min(100, len(flat_paths))))
+indices = list(range(min(200, len(flat_paths))))
 show_multiple(flat_map, flat_paths, flat_start, flat_goal, indices)
 
 
