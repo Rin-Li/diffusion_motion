@@ -85,7 +85,8 @@ def main():
         input_dim=config.network_config["unet_config"]["action_dim"],
         global_cond_dim=config.network_config["vit_config"]["num_classes"] + 
                         config.network_config["mlp_config"]["embed_dim"],
-        network_config=config.network_config
+        network_config=config.network_config,
+        is_cnn=config.is_CNN
     )
     
     from core.diffusion.diffusion import build_noise_scheduler_from_config
@@ -105,7 +106,7 @@ def main():
     # Run tests
     print("\nStarting diffusion policy evaluation...")
     results = test_diffusion_policy(
-        policy, num_tests=25, device=device
+        policy, num_tests=100, device=device
     )
     
     print("\n=== Final Results ===")

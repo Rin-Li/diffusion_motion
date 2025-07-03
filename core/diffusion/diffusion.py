@@ -18,7 +18,8 @@ def build_networks_from_config(config: Dict):
     obstacle_encode_dim = config["networks"]["vit_config"]["num_classes"]
     env_encode_dim = config["networks"]["mlp_config"]["embed_dim"]
     network_config = config["networks"]
-    return ConditionalUnet1D(input_dim=action_dim, global_cond_dim=obs_dim * action_dim + obstacle_encode_dim + env_encode_dim, network_config=network_config)
+    is_cnn = config["networks"]["is_cnn"]
+    return ConditionalUnet1D(input_dim=action_dim, global_cond_dim=obs_dim * action_dim + obstacle_encode_dim + env_encode_dim, network_config=network_config, is_cnn=is_cnn)
 
 
 def build_noise_scheduler_from_config(config: Dict):

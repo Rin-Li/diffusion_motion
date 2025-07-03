@@ -181,6 +181,7 @@ def show_multiple_with_collision_colors(grid_list, path_list, start_list, goal_l
     print(f"Collision paths: {collision_count}")
     print(f"Success rate: {success_count/total_tests:.2%}")
     print(f"Collision rate: {collision_count/total_tests:.2%}")
+    plt.savefig("test_results.pdf", dpi=150, bbox_inches='tight')
     
     plt.show()
     
