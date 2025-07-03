@@ -3,8 +3,9 @@ from utils.value_utils import create_test_scenario, generate_path, show_multiple
 from core.diffusion.diffusion import PlaneDiffusionPolicy
 from core.networks.embeddUnet import ConditionalUnet1D
 from config.plane_test_embeed import PlaneTestEmbedConfig
+import torch
 
-def test_diffusion_policy(policy, num_tests=20, device='cuda'):
+def test_diffusion_policy(policy, config_dict, num_tests=20, device='cuda',):
     """
     Test diffusion policy using value_utils functions
     """
@@ -36,7 +37,8 @@ def test_diffusion_policy(policy, num_tests=20, device='cuda'):
             )
             
             # Generate path using diffusion policy
-            trajectory, _ = generate_path(policy, start, goal, obstacles)
+            initial_action = torch.randn((1, config_dict["horizon"], config_dict["action_dim"]), device=device)
+            trajectory, _ = generate_path(policy, start, goal, obstacles, initial_action)
             
             # Convert to numpy for visualization
             grid_np = obstacles[0, 0].cpu().numpy()
@@ -106,7 +108,7 @@ def main():
     # Run tests
     print("\nStarting diffusion policy evaluation...")
     results = test_diffusion_policy(
-        policy, num_tests=100, device=device
+        policy, num_tests=100, device=device, config_dict=config_dict
     )
     
     print("\n=== Final Results ===")

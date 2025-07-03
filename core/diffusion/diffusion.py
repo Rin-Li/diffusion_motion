@@ -67,7 +67,7 @@ class PlaneDiffusionPolicy:
         self.use_single_step_inference = False
 
 
-    def predict_action(self, obs_dict: dict):
+    def predict_action(self, obs_dict: dict, initial_action):
         """
         obs_dict 结构：
         - "sample": [obs_horizon, obs_dim]
@@ -88,7 +88,7 @@ class PlaneDiffusionPolicy:
         map_cond = torch.from_numpy(obs_dict["map"]).to(self.device, dtype=torch.float32).unsqueeze(0)  # [1, 1, 8, 8]
 
         # 4. 初始化 action 序列为高斯噪声
-        noisy_action = torch.randn((1, self.config["horizon"], self.config["action_dim"]), device=self.device)
+        noisy_action = initial_action
         naction = noisy_action
 
         # 5. 调度器时间步设置
