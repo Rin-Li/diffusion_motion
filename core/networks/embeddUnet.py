@@ -191,7 +191,6 @@ class ConditionalUnet1D(nn.Module):
         output: (B,T,input_dim)
         """
         # (B,T,C)
-        print(f"Input sample shape: {sample.shape}")
         sample = sample.moveaxis(-1, -2)
         # (B,C,T)
         
@@ -212,7 +211,6 @@ class ConditionalUnet1D(nn.Module):
         timesteps = timesteps.expand(sample.shape[0])
 
         time_embed = self.diffusion_step_encoder(timesteps)
-        print(f"Time embed shape: {time_embed.shape}, Map cond embed shape: {map_cond_embed.shape}, Env cond embed shape: {env_cond_embed.shape}")
         global_feature = torch.cat([time_embed, map_cond_embed, env_cond_embed], dim=-1) 
 
         x = sample
