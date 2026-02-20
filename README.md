@@ -8,13 +8,13 @@ This project demonstrates **2D trajectory generation using a conditional diffusi
 
 | No Obstacle | With Obstacle |
 |-------------|----------------|
-| ![](trajectory_evolution_noobstacle.gif) | ![](trajectory_evolution_obstacle.gif) |
-| ![](trajectory_noobstacle.png) | ![](trajectory_obstacle.png) |
+| ![](res/trajectory_evolution_noobstacle.gif) | ![](res/trajectory_evolution_obstacle.gif) |
+| ![](res/trajectory_noobstacle.png) | ![](res/trajectory_obstacle.png) |
 
 Things to note: in our dataset, we do not have scenarios with only one obstacle or with no obstacles at all. Therefore, the examples we show are situations that the model has absolutely never seen before.
 
 ##  Model Architecture
-![](all_step.png)
+![](res/all_step.png)
 A **conditional diffusion model** for 2D path planning. The core components are:
 
 -  **Start & Goal Encoding**  
