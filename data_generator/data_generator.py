@@ -1,9 +1,10 @@
 import numpy as np
 from RRT_star import RRTStar
 from pathlib import Path
+from typing import Union
 
 class DataGenerator2D:
-    def __init__(self, bounds, num_samples: int, max_obstacles: int = 5, max_iter_per_sample: int = 100, outfile: str | Path = "rrt_dataset.npz"):
+    def __init__(self, bounds, num_samples: int, max_obstacles: int = 5, max_iter_per_sample: int = 100, outfile: Union[str, Path] = "rrt_dataset.npz"):
         self.bounds = np.asarray(bounds, dtype=float)
         self.num_samples = num_samples
         self.max_obstacles = max_obstacles
@@ -81,8 +82,8 @@ class DataGenerator2D:
 
 
 if __name__ == "__main__":
-    bounds = [(0, 8), (0, 8)]    # x, y 范围
-    gen_1 = DataGenerator2D(bounds, num_samples=500, outfile="rrt_2d_dataset_500.npz")
+    bounds = [(0, 8), (0, 8)] 
+    gen_1 = DataGenerator2D(bounds,num_samples=200, outfile="rrt_2d_dataset_500.npz")
     gen_1.generate()
-    gen_2 = DataGenerator2D(bounds, num_samples=1000, outfile="rrt_2d_dataset_1000.npz")
-    gen_2.generate()
+    # gen_2 = DataGenerator2D(bounds, max_iter=2000, step_size=1.0, goal_tol=0.3, num_samples=1000, outfile="rrt_2d_dataset_1000.npz")
+    # gen_2.generate()
