@@ -65,6 +65,8 @@ class PlaneTestEmbedConfig:
                 'num_warmup_steps': 500
             }
         }
+        
+        self.is_CNN = True
 
     def to_dict(self):
         return {
@@ -73,5 +75,6 @@ class PlaneTestEmbedConfig:
             "normalizer": self.normalizer,
             "trainer": self.trainer,
             "horizon": self.horizon,
-            "action_dim": self.action_dim
+            "action_dim": self.action_dim,
+            "is_CNN": self.is_CNN
         }

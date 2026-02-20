@@ -18,7 +18,8 @@ def build_networks_from_config(config: Dict):
     obstacle_encode_dim = config["networks"]["vit_config"]["num_classes"]
     env_encode_dim = config["networks"]["mlp_config"]["embed_dim"]
     network_config = config["networks"]
-    return ConditionalUnet1D(input_dim=action_dim, global_cond_dim=obs_dim * action_dim + obstacle_encode_dim + env_encode_dim, network_config=network_config)
+    is_cnn = config["networks"]["is_cnn"]
+    return ConditionalUnet1D(input_dim=action_dim, global_cond_dim=obs_dim * action_dim + obstacle_encode_dim + env_encode_dim, network_config=network_config, is_cnn=is_cnn)
 
 
 def build_noise_scheduler_from_config(config: Dict):
@@ -66,7 +67,7 @@ class PlaneDiffusionPolicy:
         self.use_single_step_inference = False
 
 
-    def predict_action(self, obs_dict: dict):
+    def predict_action(self, obs_dict: dict, initial_action):
         """
         obs_dict 结构：
         - "sample": [obs_horizon, obs_dim]
@@ -87,7 +88,7 @@ class PlaneDiffusionPolicy:
         map_cond = torch.from_numpy(obs_dict["map"]).to(self.device, dtype=torch.float32).unsqueeze(0)  # [1, 1, 8, 8]
 
         # 4. 初始化 action 序列为高斯噪声
-        noisy_action = torch.randn((1, self.config["horizon"], self.config["action_dim"]), device=self.device)
+        noisy_action = initial_action
         naction = noisy_action
 
         # 5. 调度器时间步设置

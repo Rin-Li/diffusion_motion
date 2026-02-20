@@ -7,6 +7,7 @@ from core.networks.helpers import SinusoidalPosEmb
 
 from core.networks.vit import ViT
 from core.networks.MLP import MLP
+from core.networks.CNN import CNN
 
 
 
@@ -63,6 +64,7 @@ class ConditionalUnet1D(nn.Module):
         kernel_size=5,
         n_groups=8,
         network_config={},
+        is_cnn=False,
     ):
         """
         input_dim: Dim of actions.
@@ -168,9 +170,11 @@ class ConditionalUnet1D(nn.Module):
         self.up_modules = up_modules
         self.down_modules = down_modules
         self.final_conv = final_conv
-        
-        self.vit_config = network_config['vit_config']
-        self.map_encoder = ViT(**self.vit_config)
+        if is_cnn:
+            self.map_encoder = CNN()
+        else:
+            self.vit_config = network_config['vit_config']
+            self.map_encoder = ViT(**self.vit_config)
         
         self.mlp_config = network_config['mlp_config']
         self.env_cond = MLP(**self.mlp_config)
@@ -191,7 +195,6 @@ class ConditionalUnet1D(nn.Module):
         output: (B,T,input_dim)
         """
         # (B,T,C)
-        print(f"Input sample shape: {sample.shape}")
         sample = sample.moveaxis(-1, -2)
         # (B,C,T)
         
@@ -212,7 +215,6 @@ class ConditionalUnet1D(nn.Module):
         timesteps = timesteps.expand(sample.shape[0])
 
         time_embed = self.diffusion_step_encoder(timesteps)
-        print(f"Time embed shape: {time_embed.shape}, Map cond embed shape: {map_cond_embed.shape}, Env cond embed shape: {env_cond_embed.shape}")
         global_feature = torch.cat([time_embed, map_cond_embed, env_cond_embed], dim=-1) 
 
         x = sample
