@@ -1,6 +1,7 @@
 import numpy as np
 from math import log
 import matplotlib.pyplot as plt
+from scipy.spatial import KDTree
 
 class RRTStar:
     class _Node:
@@ -96,22 +97,31 @@ class RRTStar:
             else:
                 x_rand = self.rng.uniform(self.bounds[:,0], self.bounds[:,1])
             
-            node_near = min(nodes, key=lambda n: np.linalg.norm(n.x - x_rand))
-            x_new     = self._steer(node_near.x, x_rand)
+            # Build KD-tree for fast nearest neighbor search
+            positions = np.array([n.x for n in nodes])
+            tree = KDTree(positions)
+            
+            # Find nearest node using KD-tree
+            _, nearest_idx = tree.query(x_rand)
+            node_near = nodes[nearest_idx]
+            x_new = self._steer(node_near.x, x_rand)
             
             if not self._segment_collision_free(node_near.x, x_new, obstacles):
                 continue
             
-            # Find neighbors within the radius
+            # Find neighbors within the radius using KD-tree
             r_n = min(self.gamma_star * (log(it) / it)**(1/self.dim), self.step_size * 2)
+            neighbor_indices = tree.query_ball_point(x_new, r_n)
+            
+            # Filter neighbors by collision check
             neighbor_ids = [
-                idx for idx, nd in enumerate(nodes)
-                if np.linalg.norm(nd.x - x_new) <= r_n
-                and self._segment_collision_free(nd.x, x_new, obstacles)
+                idx for idx in neighbor_indices
+                if self._segment_collision_free(nodes[idx].x, x_new, obstacles)
             ]
-            # No neighbors found
+            
+            # Select parent with minimum cost
             parent_id = min(
-                neighbor_ids or [nodes.index(node_near)],
+                neighbor_ids or [nearest_idx],
                 key=lambda idx: nodes[idx].cost + np.linalg.norm(nodes[idx].x - x_new)
             )
             parent_node = nodes[parent_id]
@@ -211,7 +221,7 @@ class RRTStar:
 
 def main():
     bounds = [(0, 10), (0, 10)]   
-    rrt = RRTStar(bounds, max_iter=8000, step_size=0.5, goal_tol=0.3)
+    rrt = RRTStar(bounds, max_iter=2000, step_size=1.0, goal_tol=0.3)
 
     start = [1.0, 1.0]
     goal  = [9.0, 9.0]
