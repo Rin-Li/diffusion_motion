@@ -20,7 +20,6 @@ class RRTStarGrid:
         grid: np.ndarray,
         cell_size: float,
         *,
-        collect_training_data: bool = True,
         max_iter: int = 1000,
         step_size: float = 0.5,
         goal_tol: float = 0.5,

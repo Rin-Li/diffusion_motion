@@ -1,44 +1,28 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from utils.dataset_utils import random_rectangles, sample_start_goal, rectangles_to_grid
 
 import numpy as np
+from tqdm import tqdm
 
 from .RRT_star_grid import RRTStarGrid
 
-import copy
-
-
-
-@dataclass
-class Sample2D:
-    """One navigation instance."""
-
-    grid: np.ndarray  # occupancy grid (bool)
-    cell_size: float
-    bounds: np.ndarray  # shape (2, 2)
-    obstacles: List[Tuple[float, float, float, float]]  # (x_min, y_min, w, h)
-    start: np.ndarray  # shape (2,)
-    goal: np.ndarray  # shape (2,)
-    path: np.ndarray  # (N, 2) smoothed/pruned path
-    raw_path: np.ndarray  # (M, 2) 
-
-    def to_dict(self): 
-        d = asdict(self)
-        d["obstacles"] = np.asarray(self.obstacles, dtype=float)
-        return d
-
-
 
 class DataGeneratorGrid:
+    """
+    Generates a navigation dataset by sampling random occupancy grids,
+    start/goal pairs, and solving each with RRT*.
+
+    Output format is compatible with PlanePlanningDataSets:
+        { 'start': (N,2), 'goal': (N,2), 'paths': (N,T,2), 'map': (N,H,W) }
+    """
+
     def __init__(
         self,
         bounds: List[Tuple[float, float]] | np.ndarray,
         num_samples: int,
         *,
-        collection_data: bool = True,
         resolution: float = 1.0,
         max_rectangles: Tuple[int, int] = (2, 6),
         step_size: float = 0.5,
@@ -55,106 +39,83 @@ class DataGeneratorGrid:
         self.goal_tol = goal_tol
         self.rng = np.random.default_rng(rng)
         self.origin = self.bounds[:, 0]
-        self.collection_data = collection_data
-        self.current_sample = 0
-        self.training_data_set = {
-            "start": [],
-            "goal": [],
-            "paths": [],
-            "map": [],
-            
-        }
-
-        # grid size
         self.nx, self.ny = (
             int((hi - lo) / self.resolution) for lo, hi in self.bounds
         )
+        self._data: Dict[str, list] = {"start": [], "goal": [], "paths": [], "map": []}
 
-    def generate_dataset(self, smooth: bool = True, interp: int = 100) -> List[Sample2D]:
-        samples: List[Sample2D] = []
+    def generate(self, smooth: bool = True, interp: int = 100) -> Dict[str, np.ndarray]:
+        """
+        Run RRT* to collect `num_samples` successful trajectories.
+
+        Returns a dict ready for PlanePlanningDataSets:
+            { 'start': (N,2), 'goal': (N,2), 'paths': (N,T,2), 'map': (N,H,W) }
+        """
+        self._data = {"start": [], "goal": [], "paths": [], "map": []}
+        max_attempts = self.num_samples * 200
         attempts = 0
-        while len(samples) < self.num_samples and attempts < self.num_samples * 200:
-            print(f"Generating sample {len(samples) + 1}/{self.num_samples} (attempts: {attempts})")
-            print(f"current training data set length: {len(self.training_data_set['start'])}")
-            attempts += 1
-            rects = random_rectangles(self.max_rectangles, self.bounds, self.rng)
-            grid = rectangles_to_grid(self.nx, self.ny, self.bounds, self.resolution, rects)
-            start, goal = sample_start_goal(self.bounds, grid, self.resolution,self.origin, self.rng)
 
-            planner = RRTStarGrid(
-                self.bounds,
-                grid,
-                self.resolution,
-                collect_training_data=self.collection_data,
-                max_iter=self.max_iter_rrt,
-                step_size=self.step_size,
-                goal_tol=self.goal_tol,
-                rng=self.rng,
-            )
-            path = planner.plan(
-                start,
-                goal,
-                prune=True,
-                optimize=smooth,
-                interp_points=interp,
-            )
-            
+        with tqdm(total=self.num_samples, desc="Generating samples") as pbar:
+            while len(self._data["start"]) < self.num_samples:
+                if attempts >= max_attempts:
+                    raise RuntimeError(
+                        f"Reached {max_attempts} attempts but only collected "
+                        f"{len(self._data['start'])}/{self.num_samples} samples. "
+                        "Consider relaxing obstacle density or increasing max_attempts."
+                    )
+                attempts += 1
 
-            if path is None:
-                continue
-            
-            self.training_data_set["start"].append(copy.deepcopy(start))
-            self.training_data_set["goal"].append(copy.deepcopy(goal))
-            self.training_data_set["map"].append(copy.deepcopy(grid))
-            self.training_data_set["paths"].append(copy.deepcopy(path))
-
-            # Use the raw path cached by the planner — no need to re-run RRT*
-            raw_path = planner.last_raw_path
-            samples.append(
-                Sample2D(
-                    grid=grid,
-                    cell_size=self.resolution,
-                    bounds=self.bounds,
-                    obstacles=rects,
-                    start=start,
-                    goal=goal,
-                    path=path,
-                    raw_path=np.asarray(raw_path),
+                rects = random_rectangles(self.max_rectangles, self.bounds, self.rng)
+                grid = rectangles_to_grid(
+                    self.nx, self.ny, self.bounds, self.resolution, rects
                 )
-            )
-        if len(samples) < self.num_samples:
-            raise RuntimeError("Could not create the requested number of samples.")
-        return samples, self.training_data_set
+                start, goal = sample_start_goal(
+                    self.bounds, grid, self.resolution, self.origin, self.rng
+                )
 
-    def save_npy(self, outfile: str | Path) -> None:
-        """Save training data in the format expected by PlanePlanningDataSets.
+                planner = RRTStarGrid(
+                    self.bounds,
+                    grid,
+                    self.resolution,
+                    max_iter=self.max_iter_rrt,
+                    step_size=self.step_size,
+                    goal_tol=self.goal_tol,
+                    rng=self.rng,
+                )
+                path = planner.plan(
+                    start, goal, prune=True, optimize=smooth, interp_points=interp
+                )
 
-        Saves a dict with keys: 'start', 'goal', 'paths', 'map' as a .npy file
-        loadable via: np.load(outfile, allow_pickle=True).item()
+                if path is None:
+                    continue
+
+                self._data["start"].append(start)
+                self._data["goal"].append(goal)
+                self._data["map"].append(grid)
+                self._data["paths"].append(path)
+                pbar.update(1)
+                pbar.set_postfix(attempts=attempts)
+
+        return {
+            "start": np.array(self._data["start"], dtype=np.float32),
+            "goal":  np.array(self._data["goal"],  dtype=np.float32),
+            "paths": np.array(self._data["paths"], dtype=np.float32),
+            "map":   np.array(self._data["map"],   dtype=np.float32),
+        }
+
+    def save(self, dataset: Dict[str, np.ndarray], outfile: str | Path) -> None:
+        """
+        Save dataset to a .npy file.
+        Load with: np.load(outfile, allow_pickle=True).item()
         """
         outfile = Path(outfile)
         outfile.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "start": np.array(self.training_data_set["start"], dtype=np.float32),
-            "goal":  np.array(self.training_data_set["goal"],  dtype=np.float32),
-            "paths": np.array(self.training_data_set["paths"], dtype=np.float32),
-            "map":   np.array(self.training_data_set["map"],   dtype=np.float32),
-        }
-        np.save(outfile, data)
-        print(f"Dataset saved to: {outfile.resolve()}  ({len(data['paths'])} samples)")
-
-    def save_npz(self, samples: List[Sample2D], outfile: str | Path) -> None:
-        """Save full Sample2D objects (including raw paths) for debugging."""
-        arr = {f"sample_{i}": s.to_dict() for i, s in enumerate(samples)}
-        np.savez_compressed(outfile, **arr)
-
-    def save_train_data(self, out_file: str | Path):
-        np.save(out_file, self.training_data_set)
+        np.save(outfile, dataset)
+        print(f"Dataset saved → {outfile.resolve()}  ({len(dataset['paths'])} samples)")
 
 
 if __name__ == "__main__":
     gen = DataGeneratorGrid(bounds=[(0, 8), (0, 8)], num_samples=10, rng=30)
-    ds, train_data_set = gen.generate_dataset()
-    gen.save_train_data("train_data_set.npy")
-    train_data_set = np.load("train_data_set.npy", allow_pickle=True).item()
+    dataset = gen.generate()
+    gen.save(dataset, "dataset/train_data_set.npy")
 
