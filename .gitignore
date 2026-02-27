@@ -2,10 +2,6 @@
 checkpoints/
 wandb/
 ckpt_final.ckpt
-config/__pyache__
-core/__pyache__
-data_generator/__pyache__
-dataset/__pyache__
-test/__pyache__
-utils/__pyache__
 .venv/
+.vscode/
+**/__pycache__/
