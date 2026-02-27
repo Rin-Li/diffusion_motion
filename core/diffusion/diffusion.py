@@ -74,13 +74,7 @@ class PlaneDiffusionPolicy:
         - "env": concatenated vector of [2 * obs_dim]
         - "map": [1, 8, 8]
         """
-
-        # 1. action
-        obs_seq = obs_dict["sample"]  # shape: [obs_horizon, obs_dim]
-        nobs = self.normalizer.normalize_data(obs_seq, stats=self.norm_stats)
-        nobs = nobs.flatten()
-        nobs = torch.from_numpy(nobs).to(self.device, dtype=torch.float32)
-
+    
         # 2. env 
         env_cond = torch.from_numpy(obs_dict["env"]).to(self.device, dtype=torch.float32).unsqueeze(0)  # [1, 2*obs_dim]
 

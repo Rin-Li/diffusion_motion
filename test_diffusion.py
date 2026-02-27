@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 from utils.value_utils import create_test_scenario, generate_path, show_multiple_with_collision_colors
 from core.diffusion.diffusion import PlaneDiffusionPolicy
 from core.networks.embeddUnet import ConditionalUnet1D
@@ -74,8 +75,8 @@ def main():
     Main function to load model and run tests
     """
     # Model configuration
-    ckpt_path = '/Users/yulinli/Desktop/Exp/diffusion_policy/ckpt_ep999.ckpt'
-    device = "cpu"  # Change to "cuda" if available
+    ckpt_path = Path(__file__).parent / "checkpoints" / "ckpt_ep49.ckpt"
+    device = "cuda"  # Change to "cuda" if available
     
     print("Loading diffusion policy model...")
     

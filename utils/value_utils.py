@@ -52,31 +52,23 @@ def create_test_scenario(bounds, cell_size, origin, rng, max_rectangles, device=
 
     return start_tensor, goal_tensor, obstacle_map
 
-def generate_path(policy: PlaneDiffusionPolicy, start, goal, obstacles):
+def generate_path(policy: PlaneDiffusionPolicy, start, goal, obstacles, initial_action=None):
     device = start.device
-    obs_dim = start.shape[1]
-    pred_horizon = policy.config["horizon"]
-
-    # Fake observation sample (all zeros)
-    fake_obs_sample = np.zeros((pred_horizon, obs_dim), dtype=np.float32)
-
 
     start_np = start.cpu().numpy()[0]
     goal_np = goal.cpu().numpy()[0]
     env_cond = np.concatenate([start_np, goal_np])  # [2 * obs_dim]
 
-
     map_cond = obstacles[0].cpu().numpy()  # shape: [1, 8, 8]
 
 
     obs_dict = {
-        "sample": fake_obs_sample,
         "env": env_cond,
         "map": map_cond,
     }
+    
 
-
-    trajectory, trajectory_all = policy.predict_action(obs_dict)  # shape: [pred_horizon, obs_dim]
+    trajectory, trajectory_all = policy.predict_action(obs_dict, initial_action)  # shape: [pred_horizon, obs_dim]
 
     return torch.tensor(trajectory, device=device).unsqueeze(0), trajectory_all  # [1, H, obs_dim]
 

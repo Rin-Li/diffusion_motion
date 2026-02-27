@@ -66,7 +66,7 @@ class PlaneTestEmbedConfig:
             }
         }
         
-        self.is_CNN = True
+        self.is_CNN = False
 
     def to_dict(self):
         return {
