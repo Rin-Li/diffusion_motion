@@ -107,9 +107,9 @@ class DataGeneratorGrid:
             self.training_data_set["goal"].append(copy.deepcopy(goal))
             self.training_data_set["map"].append(copy.deepcopy(grid))
             self.training_data_set["paths"].append(copy.deepcopy(path))
-            
 
-            raw_path = planner._plan_raw(start, goal)  # noqa: SLF001 – keep raw
+            # Use the raw path cached by the planner — no need to re-run RRT*
+            raw_path = planner.last_raw_path
             samples.append(
                 Sample2D(
                     grid=grid,
@@ -126,27 +126,27 @@ class DataGeneratorGrid:
             raise RuntimeError("Could not create the requested number of samples.")
         return samples, self.training_data_set
 
+    def save_npy(self, outfile: str | Path) -> None:
+        """Save training data in the format expected by PlanePlanningDataSets.
+
+        Saves a dict with keys: 'start', 'goal', 'paths', 'map' as a .npy file
+        loadable via: np.load(outfile, allow_pickle=True).item()
+        """
+        outfile = Path(outfile)
+        outfile.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "start": np.array(self.training_data_set["start"], dtype=np.float32),
+            "goal":  np.array(self.training_data_set["goal"],  dtype=np.float32),
+            "paths": np.array(self.training_data_set["paths"], dtype=np.float32),
+            "map":   np.array(self.training_data_set["map"],   dtype=np.float32),
+        }
+        np.save(outfile, data)
+        print(f"Dataset saved to: {outfile.resolve()}  ({len(data['paths'])} samples)")
+
     def save_npz(self, samples: List[Sample2D], outfile: str | Path) -> None:
+        """Save full Sample2D objects (including raw paths) for debugging."""
         arr = {f"sample_{i}": s.to_dict() for i, s in enumerate(samples)}
         np.savez_compressed(outfile, **arr)
-    
-    # def in_collision(self, point: np.ndarray, grid) -> bool:
-    #     idx = self._to_index(point)
-    #     if not self._index_in_bounds(idx, grid):
-    #         return True  
-        
-    #   
-    #     for di in [-1, 0, 1]:
-    #         for dj in [-1, 0, 1]:
-    #             check_idx = idx + np.array([di, dj])
-    #             if self._index_in_bounds(check_idx, grid):
-    #                 if grid[tuple(check_idx)]:
-    # 
-    #                     cell_center = (check_idx + 0.5) * self.resolution + self.origin
-    #                     if np.linalg.norm(point - cell_center) < self.resolution * 0.5:
-    #                         return True
-    #     return False
-    
 
     def save_train_data(self, out_file: str | Path):
         np.save(out_file, self.training_data_set)

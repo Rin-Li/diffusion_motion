@@ -1,5 +1,5 @@
 import numpy as np
-from RRT_star import RRTStar
+from data_generator.RRT_star import RRTStar
 from pathlib import Path
 from typing import Union
 

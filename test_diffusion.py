@@ -1,7 +1,9 @@
 import numpy as np
 from pathlib import Path
-from utils.value_utils import create_test_scenario, generate_path, show_multiple_with_collision_colors
-from core.diffusion.diffusion import PlaneDiffusionPolicy
+from utils.scenario_utils import create_test_scenario, generate_path
+from utils.viz_utils import show_multiple_with_collision_colors
+from core.diffusion.policy import PlaneDiffusionPolicy
+from core.diffusion.builder import build_noise_scheduler_from_config
 from core.networks.embeddUnet import ConditionalUnet1D
 from config.plane_test_embeed import PlaneTestEmbedConfig
 import torch
@@ -92,7 +94,6 @@ def main():
         is_cnn=config.is_CNN
     )
     
-    from core.diffusion.diffusion import build_noise_scheduler_from_config
     scheduler = build_noise_scheduler_from_config(config_dict)
     
     policy = PlaneDiffusionPolicy(

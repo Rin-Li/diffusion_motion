@@ -53,14 +53,16 @@ class RRTStarGrid:
         self.gamma_star = gamma_star
         self.min_points = min_points  # for path interpolation
         self.rng = np.random.default_rng(rng)
-        self.collet_traing_data = collect_training_data
+        self.last_raw_path: np.ndarray | None = None  # cached after each plan() call
 
     def plan(self, start, goal, *, prune: bool = False, optimize: bool = False, interp_points: int = 50):
         raw_path = self._plan_raw(np.asarray(start), np.asarray(goal))
         if raw_path is None:
+            self.last_raw_path = None
             return None  # planning failure
 
-        path = np.asarray(raw_path)
+        self.last_raw_path = np.asarray(raw_path)  # cache for caller
+        path = self.last_raw_path.copy()
 
         if prune:
             path = self._prune_path(path)
@@ -158,22 +160,6 @@ class RRTStarGrid:
         return np.asarray(pruned)
 
     
-    # def in_collision(self, point: np.ndarray) -> bool:
-    #     idx = self._to_index(point)
-    #     if not self._index_in_bounds(idx):
-    #         return True  
-        
-    #   
-    #     for di in [-1, 0, 1]:
-    #         for dj in [-1, 0, 1]:
-    #             check_idx = idx + np.array([di, dj])
-    #             if self._index_in_bounds(check_idx):
-    #                 if self.grid[tuple(check_idx)]:
-    #              
-    #                     cell_center = (check_idx + 0.5) * self.cell_size + self.origin
-    #                     if np.linalg.norm(point - cell_center) < self.cell_size * 0.5:
-    #                         return True
-    #     return False
 
     def _sample_free(self) -> np.ndarray:
         for _ in range(1000):

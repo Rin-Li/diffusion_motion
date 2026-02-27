@@ -1,9 +1,3 @@
-"""
-Backwards-compatibility shim.
-Import from the canonical modules instead:
-  from core.diffusion.policy  import PlaneDiffusionPolicy
-  from core.diffusion.builder import build_networks_from_config, build_noise_scheduler_from_config
-"""
 from core.diffusion.policy import PlaneDiffusionPolicy
 from core.diffusion.builder import build_networks_from_config, build_noise_scheduler_from_config
 
