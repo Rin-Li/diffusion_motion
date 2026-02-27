@@ -47,7 +47,7 @@ def visualize_training_sample(start, goal, grid, bounds, cell_size):
     plt.grid(True)
     plt.show()
 
-# 假设你原始用的是这个 bounds 和 cell_size
+
 bounds = [(0.0, 10.0), (0.0, 10.0)]
 cell_size = 0.1
 

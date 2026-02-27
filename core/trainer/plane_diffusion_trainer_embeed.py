@@ -50,13 +50,13 @@ class PlaneDiffusionTrainer:
 
     def prepare_inputs(self, batch):
         """
-        - sample: 目标动作轨迹 (B, T, action_dim)
-        - map: 地图条件 (B, 1, H, W)
-        - env: 拼接的 [start, goal] 向量 (B, 2 * obs_dim)
+        - sample: target action trajectory (B, T, action_dim)
+        - map: map condition (B, 1, H, W)
+        - env: concatenated [start, goal] vector (B, 2 * obs_dim)
         """
-        action = batch["sample"].to(self.device, dtype=torch.float32)     # 目标输出
-        map_cond = batch["map"].to(self.device, dtype=torch.float32)      # 条件1：地图图像
-        env_cond = batch["env"].to(self.device, dtype=torch.float32)      # 条件2：[start, goal]
+        action = batch["sample"].to(self.device, dtype=torch.float32)     # target output
+        map_cond = batch["map"].to(self.device, dtype=torch.float32)      # condition 1: map image
+        env_cond = batch["env"].to(self.device, dtype=torch.float32)      # condition 2: [start, goal]
         batch_size = action.shape[0]
 
         return map_cond, env_cond, action, batch_size

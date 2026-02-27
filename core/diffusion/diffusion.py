@@ -69,13 +69,13 @@ class PlaneDiffusionPolicy:
 
     def predict_action(self, obs_dict: dict, initial_action):
         """
-        obs_dict 结构：
+        obs_dict structure:
         - "sample": [obs_horizon, obs_dim]
-        - "env": [2 * obs_dim] 的拼接向量
+        - "env": concatenated vector of [2 * obs_dim]
         - "map": [1, 8, 8]
         """
 
-        # 1. 动作
+        # 1. action
         obs_seq = obs_dict["sample"]  # shape: [obs_horizon, obs_dim]
         nobs = self.normalizer.normalize_data(obs_seq, stats=self.norm_stats)
         nobs = nobs.flatten()
@@ -87,11 +87,11 @@ class PlaneDiffusionPolicy:
         # 3. map 
         map_cond = torch.from_numpy(obs_dict["map"]).to(self.device, dtype=torch.float32).unsqueeze(0)  # [1, 1, 8, 8]
 
-        # 4. 初始化 action 序列为高斯噪声
+        # 4. initialize action sequence as Gaussian noise
         noisy_action = initial_action
         naction = noisy_action
 
-        # 5. 调度器时间步设置
+        # 5. set scheduler timesteps
         self.noise_scheduler.set_timesteps(self.noise_scheduler.config.num_train_timesteps)
         timesteps = (
             self.noise_scheduler.timesteps[:1] if self.use_single_step_inference else self.noise_scheduler.timesteps
@@ -99,7 +99,7 @@ class PlaneDiffusionPolicy:
         
         
         action_all = [naction.detach().cpu().numpy()[0]]  
-        # 6. 执行反向去噪
+        # 6. execute reverse denoising
         for t in timesteps:
             noise_pred = self.net(
                 sample=naction,
@@ -118,11 +118,11 @@ class PlaneDiffusionPolicy:
                 
             action_all.append(naction.detach().cpu().numpy()[0].copy())
 
-        # 7. 反归一化
+        # 7. denormalize
         action_pred = naction.detach().cpu().numpy()[0]
         action_pred = self.normalizer.unnormalize_data(action_pred, stats=self.norm_stats)
         
-            # 反归一化所有轨迹步骤
+            # denormalize all trajectory steps
         action_all_unnorm = []
         for action_step in action_all:
             action_step_unnorm = self.normalizer.unnormalize_data(action_step, stats=self.norm_stats)

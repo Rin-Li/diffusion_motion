@@ -57,8 +57,8 @@ class PlanePlanningDataSets(torch.utils.data.Dataset):
         map_cond = self.map[idx]  # (1, H, W)
         env_cond = torch.cat([self.start[idx], self.goal[idx]], dim=-1)  # (2 * obs_dim)
         return {
-            "sample": sample,     # 动作轨迹
-            "map": map_cond,      # 地图条件
+            "sample": sample,     # action trajectory
+            "map": map_cond,      # map condition
             "env": env_cond,      # start+goal
         }
 

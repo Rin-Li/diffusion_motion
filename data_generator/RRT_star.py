@@ -41,7 +41,7 @@ class RRTStar:
                 from scipy.interpolate import splprep, splev
 
                 k = min(3, len(pruned) - 1)
-                # pruned.T 形状 (d, n)
+                # pruned.T shape (d, n)
                 tck, _ = splprep(pruned.T, s=0, k=k)
                 u_new = np.linspace(0, 1, interp_points)
                 coords = splev(u_new, tck)
