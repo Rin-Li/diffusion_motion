@@ -1,8 +1,6 @@
 from typing import Dict
 
-from diffusers.schedulers.scheduling_ddim import DDIMScheduler
-from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
-from diffusers.schedulers.scheduling_dpmsolver_multistep import DPMSolverMultistepScheduler
+from core.diffusion.ddpm import DDPMScheduler
 
 from core.networks.embeddUnet import ConditionalUnet1D
 
@@ -38,20 +36,6 @@ def build_noise_scheduler_from_config(config: Dict):
             beta_schedule=config["noise_scheduler"]["ddpm"]["beta_schedule"],
             clip_sample=config["noise_scheduler"]["ddpm"]["clip_sample"],
             prediction_type=config["noise_scheduler"]["ddpm"]["prediction_type"],
-        )
-    elif scheduler_type == "ddim":
-        return DDIMScheduler(
-            num_train_timesteps=config["noise_scheduler"]["ddim"]["num_train_timesteps"],
-            beta_schedule=config["noise_scheduler"]["ddim"]["beta_schedule"],
-            clip_sample=config["noise_scheduler"]["ddim"]["clip_sample"],
-            prediction_type=config["noise_scheduler"]["ddim"]["prediction_type"],
-        )
-    elif scheduler_type == "dpmsolver":
-        return DPMSolverMultistepScheduler(
-            num_train_timesteps=config["noise_scheduler"]["dpmsolver"]["num_train_timesteps"],
-            beta_schedule=config["noise_scheduler"]["dpmsolver"]["beta_schedule"],
-            prediction_type=config["noise_scheduler"]["dpmsolver"]["prediction_type"],
-            use_karras_sigmas=config["noise_scheduler"]["dpmsolver"]["use_karras_sigmas"],
         )
     else:
         raise NotImplementedError(f"Unsupported scheduler type: {scheduler_type}")

@@ -33,18 +33,6 @@ class PlaneTestEmbedConfig:
                 "clip_sample": True,
                 "prediction_type": "epsilon",
             },
-            "ddim": {
-                "num_train_timesteps": 100,
-                "beta_schedule": "squaredcos_cap_v2",
-                "clip_sample": True,
-                "prediction_type": "epsilon",
-            },
-            "dpmsolver": {
-                "num_train_timesteps": 100,
-                "beta_schedule": "squaredcos_cap_v2",
-                "prediction_type": "epsilon",
-                "use_karras_sigmas": True,
-            },
         }
 
         self.normalizer = {

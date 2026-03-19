@@ -6,3 +6,4 @@ ckpt_final.ckpt
 .venv/
 .vscode/
 **/__pycache__/
+train_embdedd.ipynb
