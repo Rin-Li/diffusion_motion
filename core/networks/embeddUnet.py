@@ -171,7 +171,8 @@ class ConditionalUnet1D(nn.Module):
         self.down_modules = down_modules
         self.final_conv = final_conv
         if is_cnn:
-            self.map_encoder = CNN()
+            cnn_config = network_config.get('cnn_config', {})
+            self.map_encoder = CNN(**cnn_config)
         else:
             self.vit_config = network_config['vit_config']
             self.map_encoder = ViT(**self.vit_config)
