@@ -2,6 +2,7 @@ import numpy as np
 from math import log
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
+from utils.dataset_utils import circle_point_in_collision, circle_segment_dist
 
 class RRTStar:
     class _Node:
@@ -11,7 +12,7 @@ class RRTStar:
             self.parent = parent      
             self.cost   = cost         
     
-    def __init__(self, bounds, max_iter=5000, step_size=0.1, goal_tol=0.5, goal_bias=0.05, gamma_star=1.5, rng=None):
+    def __init__(self, bounds, max_iter=5000, step_size=1.0, goal_tol=0.3, goal_bias=0.05, gamma_star=1.5, rng=None):
         self.bounds     = np.asarray(bounds, dtype=float)
         self.dim        = self.bounds.shape[0]
         self.max_iter   = max_iter
@@ -36,12 +37,11 @@ class RRTStar:
         pruned.append(path[-1])
         pruned = np.asarray(pruned)
 
-        if len(pruned) >= 4:
+        if len(pruned) >= 2:
             try:
                 from scipy.interpolate import splprep, splev
 
                 k = min(3, len(pruned) - 1)
-                # pruned.T shape (d, n)
                 tck, _ = splprep(pruned.T, s=0, k=k)
                 u_new = np.linspace(0, 1, interp_points)
                 coords = splev(u_new, tck)
@@ -51,11 +51,17 @@ class RRTStar:
         else:
             smoothed = self._linear_interp(pruned, interp_points)
 
-
         for a, b in zip(smoothed[:-1], smoothed[1:]):
             if not self._segment_collision_free(a, b, obstacles):
-                return False                 
-        return smoothed                     
+                # spline clips obstacle — fall back to linear rather than discarding
+                result = self._linear_interp(pruned, interp_points)
+                result[0]  = pruned[0]
+                result[-1] = pruned[-1]
+                return result
+        # ensure endpoints are exactly start and goal (spline may introduce tiny drift)
+        smoothed[0]  = pruned[0]
+        smoothed[-1] = pruned[-1]
+        return smoothed
 
     def _linear_interp(self, pts: np.ndarray, n_total: int):
 
@@ -163,28 +169,12 @@ class RRTStar:
             return x_to.copy()
         return x_from + (vec / dist) * self.step_size
     
-    # Collision check
-    @staticmethod
-    def _segment_to_sphere_dist(a, b, center):
-        ab = b - a
-        denom = np.dot(ab, ab)
-        if denom == 0.0:
-            return np.linalg.norm(a - center)
-        t  = np.clip(np.dot(center - a, ab) / denom, 0.0, 1.0)
-        closest = a + t * ab
-        return np.linalg.norm(closest - center)
-    
+    # Collision check (delegated to utils.dataset_utils)
     def _in_collision(self, point, obstacles):
-        for c, r in obstacles:
-            if np.linalg.norm(point - c) <= r:
-                return True
-        return False
-    
+        return circle_point_in_collision(point, obstacles)
+
     def _segment_collision_free(self, a, b, obstacles):
-        for c, r in obstacles:
-            if self._segment_to_sphere_dist(a, b, c) <= r:
-                return False
-        return True
+        return all(circle_segment_dist(a, b, np.asarray(c)) > r for c, r in obstacles)
     
     def visualize_path(self, bounds, obstacles, path=None, raw_path=None, start=None, goal=None):
         _, ax = plt.subplots(figsize=(6, 6))

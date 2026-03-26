@@ -38,19 +38,23 @@ class PlaneDiffusionPolicy:
             action_pred      : np.ndarray [pred_horizon, action_dim]  (denormalized)
             action_all_unnorm: list of np.ndarray, one per diffusion step (denormalized)
         """
-        # 1. env (start + goal)
-        env_cond = (
-            torch.from_numpy(obs_dict["env"])
-            .to(self.device, dtype=torch.float32)
-            .unsqueeze(0)
-        )  # [1, 2*obs_dim]
+        # 1. env (start + goal) — optional; used only for hard endpoint clamp
+        env_np = obs_dict.get("env", None)
+        if env_np is not None:
+            env_cond = (
+                torch.from_numpy(np.asarray(env_np, dtype=np.float32))
+                .to(self.device)
+                .unsqueeze(0)
+            )  # [1, 2*obs_dim]
+        else:
+            env_cond = None
 
-        # 2. map
+        # 2. map (1-channel or 3-channel depending on mode)
         map_cond = (
-            torch.from_numpy(obs_dict["map"])
-            .to(self.device, dtype=torch.float32)
+            torch.from_numpy(np.asarray(obs_dict["map"], dtype=np.float32))
+            .to(self.device)
             .unsqueeze(0)
-        )  # [1, 1, H, W]
+        )  # [1, C, H, W]
 
         # 3. initialize action sequence from provided noise
         naction = initial_action
@@ -73,7 +77,7 @@ class PlaneDiffusionPolicy:
                 sample=naction,
                 timestep=t,
                 map_cond=map_cond,
-                env_cond=env_cond,
+                env_cond=env_cond,   # None when using 3-channel map mode
             )
             if self.use_single_step_inference:
                 naction = initial_action - noise_pred
@@ -91,7 +95,13 @@ class PlaneDiffusionPolicy:
             action_pred, stats=self.norm_stats
         )
 
-        # 6b. denormalize all intermediate steps
+        # 6b. hard-clamp endpoints to exactly match start and goal (when env is available)
+        if env_np is not None:
+            obs_dim = len(env_np) // 2
+            action_pred[0]  = env_np[:obs_dim]   # first point = start
+            action_pred[-1] = env_np[obs_dim:]   # last point  = goal
+
+        # 6c. denormalize all intermediate steps
         action_all_unnorm = [
             self.normalizer.unnormalize_data(step, stats=self.norm_stats)
             for step in action_all

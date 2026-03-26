@@ -16,6 +16,8 @@ def build_dataloader_from_dataset_and_config(config: Dict, dataset: torch.utils.
         batch_size=config["trainer"]["batch_size"],
         shuffle=True,
         pin_memory=True,
+        num_workers=4,
+        persistent_workers=True,
     )
 
 
@@ -48,20 +50,22 @@ class PlaneDiffusionTrainer:
         self.use_ema = self.config["trainer"]["use_ema"]
         self.ema = EMAModel(parameters=self.net.parameters(), power=0.75) if self.use_ema else None
 
+        # mixed precision — enabled only on CUDA, gracefully disabled elsewhere
+        self._use_amp = self.device == 'cuda'
+        self.scaler = torch.amp.GradScaler('cuda', enabled=self._use_amp)
+
     def prepare_inputs(self, batch):
         """
         - sample: target action trajectory (B, T, action_dim)
-        - map: map condition (B, 1, H, W)
-        - env: concatenated [start, goal] vector (B, 2 * obs_dim)
+        - map: map condition (B, C, H, W)  — 1-channel or 3-channel depending on dataset
         """
-        action = batch["sample"].to(self.device, dtype=torch.float32)     # target output
-        map_cond = batch["map"].to(self.device, dtype=torch.float32)      # condition 1: map image
-        env_cond = batch["env"].to(self.device, dtype=torch.float32)      # condition 2: [start, goal]
+        action   = batch["sample"].to(self.device, dtype=torch.float32)   # target output
+        map_cond = batch["map"].to(self.device, dtype=torch.float32)       # condition: map image
         batch_size = action.shape[0]
 
-        return map_cond, env_cond, action, batch_size
+        return map_cond, action, batch_size
 
-    def optimization_step(self, action, map_cond, env_cond, batch_size):
+    def optimization_step(self, action, map_cond, batch_size):
         # sample noise to add to actions
         noise = torch.randn(action.shape, device=self.device)
 
@@ -74,18 +78,17 @@ class PlaneDiffusionTrainer:
         # (this is the forward diffusion process)
         noisy_actions = self.noise_scheduler.add_noise(action, noise, timesteps)
 
-        # predict the noise residual
-        noise_pred = self.net(noisy_actions, timesteps, map_cond, env_cond)
+        # forward pass under mixed precision (env_cond=None → 3-channel map mode)
+        with torch.amp.autocast('cuda', enabled=self._use_amp):
+            noise_pred = self.net(noisy_actions, timesteps, map_cond)
+            loss = nn.functional.mse_loss(noise_pred, noise)
 
-        # L2 loss
-        loss = nn.functional.mse_loss(noise_pred, noise)
-
-        # optimize
-        loss.backward()
-        self.optimizer.step()
+        # optimize with gradient scaler (no-op when AMP disabled)
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
         self.optimizer.zero_grad()
         # step lr scheduler every batch
-        # this is different from standard pytorch behavior
         self.lr_scheduler.step()
 
         # update Exponential Moving Average of the model weights
@@ -94,7 +97,8 @@ class PlaneDiffusionTrainer:
 
         return loss
 
-    def train(self, num_epochs: int, save_ckpt_epoch: int = None):
+    def train(self, num_epochs: int, save_ckpt_epoch: int = None,
+              eval_fn=None, eval_every: int = 100):
         if save_ckpt_epoch is None:
             save_ckpt_epoch = num_epochs
 
@@ -115,8 +119,8 @@ class PlaneDiffusionTrainer:
                 # batch loop
                 with tqdm(self.dataloader, desc="Batch", leave=False) as tepoch:
                     for nbatch in tepoch:
-                        map_cond, env_cond, action, B = self.prepare_inputs(nbatch)
-                        loss = self.optimization_step(action, map_cond, env_cond, B)
+                        map_cond, action, B = self.prepare_inputs(nbatch)
+                        loss = self.optimization_step(action, map_cond, B)
 
                         # logging
                         loss_cpu = loss.item()
@@ -128,7 +132,14 @@ class PlaneDiffusionTrainer:
 
                 # save intermediate ckpt
                 if (epoch_idx + 1) % save_ckpt_epoch == 0:
-                    self.save_checkpoint(path=f"ckpt_ep{epoch_idx}.ckpt")
+                    self.save_checkpoint(path=f"ckpt/ckpt_ep{epoch_idx + 1}.ckpt")
+
+                # eval callback
+                if eval_fn is not None and (epoch_idx + 1) % eval_every == 0:
+                    self.net.eval()
+                    with torch.no_grad():
+                        eval_fn(self.net, epoch_idx + 1)
+                    self.net.train()
 
         return trn_loss
 

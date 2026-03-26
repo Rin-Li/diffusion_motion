@@ -6,4 +6,11 @@ ckpt_final.ckpt
 .venv/
 .vscode/
 **/__pycache__/
-train_embdedd.ipynb
+train_embedd.ipynb
+intermediate_results/
+ckpt/
+test/dataset_continuous_viz.pdf
+dataset/train_continuous.npy
+train.log
+test_
+test_results_continuous.pdf

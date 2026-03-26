@@ -9,17 +9,18 @@ class CNN(nn.Module):
     Architecture: 4 conv-pool blocks, then 2 FC layers.
 
     For image_size=64:
-        (1, 64, 64) -> pool x4 -> (128, 4, 4) -> flatten 2048 -> output_dim
+        (in_channels, 64, 64) -> pool x4 -> (128, 4, 4) -> flatten 2048 -> output_dim
 
     Args:
         image_size  : spatial size of input map (H == W). Must be divisible by 16.
         output_dim  : dimension of the output latent vector.
+        in_channels : number of input channels (1 for binary map, 3 for map+start+goal blobs).
     """
-    def __init__(self, image_size: int = 64, output_dim: int = 128):
+    def __init__(self, image_size: int = 64, output_dim: int = 128, in_channels: int = 1):
         super().__init__()
         assert image_size % 16 == 0, "image_size must be divisible by 16 (4 pool layers)"
 
-        self.conv1 = nn.Conv2d(1,   16,  kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, 16,  kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(16,  32,  kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(32,  64,  kernel_size=3, padding=1)
         self.conv4 = nn.Conv2d(64,  128, kernel_size=3, padding=1)
@@ -36,7 +37,7 @@ class CNN(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: (B, 1, H, W) or (B, H, W)
+            x: (B, in_channels, H, W) or (B, H, W) for single-channel
         Returns:
             latent: (B, output_dim)
         """

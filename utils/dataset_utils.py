@@ -2,6 +2,31 @@ import numpy as np
 from typing import List, Tuple
 
 
+def circle_segment_dist(a, b, center):
+    """Minimum distance from line segment ab to circle center (continuous space)."""
+    ab = b - a
+    denom = np.dot(ab, ab)
+    if denom == 0.0:
+        return np.linalg.norm(a - center)
+    t = np.clip(np.dot(center - a, ab) / denom, 0.0, 1.0)
+    return np.linalg.norm(a + t * ab - center)
+
+def circle_point_in_collision(point, obstacles):
+    """Check if point is inside any circular obstacle. obstacles: list of (center, radius)."""
+    return any(np.linalg.norm(np.asarray(point) - np.asarray(c)) <= r for c, r in obstacles)
+
+def validate_path_circle_collision_free(path, obstacles):
+    """Check if path is collision-free against circular obstacles (continuous space)."""
+    for pt in path:
+        if circle_point_in_collision(pt, obstacles):
+            return False
+    for a, b in zip(path[:-1], path[1:]):
+        for c, r in obstacles:
+            if circle_segment_dist(a, b, np.asarray(c)) <= r:
+                return False
+    return True
+
+
 def to_index(point: np.ndarray, cell_size, origin) -> np.ndarray:
     return np.floor((point - origin) / cell_size).astype(int)
 

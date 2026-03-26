@@ -4,6 +4,73 @@ from pathlib import Path
 from typing import Union
 
 
+def _line_blocked(start, goal, obstacles):
+    """Return True if the straight line start→goal is blocked by at least one obstacle circle."""
+    d = goal - start
+    length = np.linalg.norm(d)
+    if length < 1e-10:
+        return False
+    d_unit = d / length
+    for c, r in obstacles:
+        t = np.clip(np.dot(c - start, d_unit), 0, length)
+        if np.linalg.norm(start + t * d_unit - c) <= r:
+            return True
+    return False
+
+
+def _worker(args):
+    """Module-level worker for multiprocessing.Pool (must be picklable)."""
+    bounds, max_obstacles, max_iter, interp_points, map_resolution = args
+    rng = np.random.default_rng()
+    bounds_arr = np.asarray(bounds, dtype=float)
+    rrt = RRTStar(bounds=bounds)
+
+    for _ in range(max_iter):
+        start = rng.uniform(bounds_arr[:, 0], bounds_arr[:, 1])
+        goal  = rng.uniform(bounds_arr[:, 0], bounds_arr[:, 1])
+
+        if np.linalg.norm(start - goal) < 2.0:
+            continue
+
+        obstacles = []
+        for _ in range(rng.integers(1, max_obstacles + 1)):
+            center = rng.uniform(bounds_arr[:, 0], bounds_arr[:, 1])
+            radius = rng.uniform(0.3, 1.2)
+            obstacles.append((center, radius))
+
+        if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
+            continue
+        if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
+            continue
+
+        if not _line_blocked(start, goal, obstacles):
+            continue
+
+        path = rrt.plan(start, goal, obstacles, optimize=True, interp_points=interp_points)
+        if path is None:
+            continue
+
+        # build occupancy map
+        res = map_resolution
+        xmin, xmax = bounds_arr[0]
+        ymin, ymax = bounds_arr[1]
+        xs = np.linspace(xmin, xmax, res)
+        ys = np.linspace(ymin, ymax, res)
+        grid_x, grid_y = np.meshgrid(xs, ys)
+        occ = np.zeros((res, res), dtype=np.float32)
+        for (cx, cy), r in obstacles:
+            dist = np.sqrt((grid_x - cx) ** 2 + (grid_y - cy) ** 2)
+            occ[dist <= r] = 1.0
+
+        return (
+            start.astype(np.float32),
+            goal.astype(np.float32),
+            np.asarray(path, dtype=np.float32),
+            occ,
+        )
+    return None
+
+
 class DataGenerator2D:
     """
     Generate 2D path-planning datasets with circular obstacles in continuous space.
@@ -49,18 +116,22 @@ class DataGenerator2D:
             start = np.random.uniform(self.bounds[:, 0], self.bounds[:, 1])
             goal  = np.random.uniform(self.bounds[:, 0], self.bounds[:, 1])
 
-            if np.linalg.norm(start - goal) < 1e-3:
+            if np.linalg.norm(start - goal) < 2.0:
                 continue
 
             obstacles = []
             for _ in range(np.random.randint(1, self.max_obstacles + 1)):
                 center = np.random.uniform(self.bounds[:, 0], self.bounds[:, 1])
-                radius = np.random.uniform(0.3, 3.0)
+                radius = np.random.uniform(0.3, 1.2)
                 obstacles.append((center, radius))
 
             if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
                 continue
             if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
+                continue
+
+            # reject samples where the straight line is not blocked — avoids trivial paths
+            if not _line_blocked(start, goal, obstacles):
                 continue
 
             return start, goal, obstacles
@@ -92,7 +163,7 @@ class DataGenerator2D:
         return occ
 
     # ------------------------------------------------------------------
-    # generation loop
+    # generation loop (single process)
     # ------------------------------------------------------------------
 
     def generate(self):
@@ -124,6 +195,58 @@ class DataGenerator2D:
         print(f"Saved dataset to: {self.outfile.resolve()}")
 
     # ------------------------------------------------------------------
+    # generation loop (multiprocessing)
+    # ------------------------------------------------------------------
+
+    def generate_mp(self, num_workers=None):
+        """Generate dataset using a map-reduce pattern with multiprocessing.Pool."""
+        import math
+        from multiprocessing import Pool, cpu_count
+
+        if num_workers is None:
+            num_workers = cpu_count()
+
+        print(f"Using {num_workers} workers to generate {self.num_samples} samples...", flush=True)
+
+        task_args = (
+            self.bounds.tolist(),
+            self.max_obstacles,
+            self.max_iter_per_sample,
+            self.interp_points,
+            self.map_resolution,
+        )
+
+        # Submit num_workers * 10 tasks per round so the OS scheduler keeps all
+        # cores busy without manual load balancing.
+        batch_size    = num_workers * 10
+        collected     = []
+        last_reported = 0
+        report_every  = 100
+
+        with Pool(num_workers) as pool:
+            while len(collected) < self.num_samples:
+                needed = self.num_samples - len(collected)
+
+                # -- Map: run batch_size workers in parallel --
+                results = pool.map(_worker, [task_args] * batch_size)
+
+                # -- Reduce: filter valid results --
+                valid = [r for r in results if r is not None]
+                collected.extend(valid[:needed])
+
+                if len(collected) - last_reported >= report_every or len(collected) >= self.num_samples:
+                    print(f"Generated {len(collected)}/{self.num_samples} paths.", flush=True)
+                    last_reported = len(collected)
+
+        self.starts = [r[0] for r in collected]
+        self.goals  = [r[1] for r in collected]
+        self.paths  = [r[2] for r in collected]
+        self.maps   = [r[3] for r in collected]
+
+        self._save_npy()
+        print(f"Saved dataset to: {self.outfile.resolve()}", flush=True)
+
+    # ------------------------------------------------------------------
     # save
     # ------------------------------------------------------------------
 
@@ -138,10 +261,10 @@ class DataGenerator2D:
             'map'    : (N, H, W)   float32   — raw map; dataset adds channel dim
         """
         data = {
-            "start": np.stack(self.starts, axis=0),   # (N, 2)
-            "goal":  np.stack(self.goals,  axis=0),   # (N, 2)
-            "paths": np.stack(self.paths,  axis=0),   # (N, T, 2)
-            "map":   np.stack(self.maps,   axis=0),   # (N, H, W)
+            "start": np.stack(self.starts[:self.num_samples], axis=0),
+            "goal":  np.stack(self.goals[:self.num_samples],  axis=0),
+            "paths": np.stack(self.paths[:self.num_samples],  axis=0),
+            "map":   np.stack(self.maps[:self.num_samples],   axis=0),
         }
         np.save(self.outfile, data)
 

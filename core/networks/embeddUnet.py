@@ -176,9 +176,12 @@ class ConditionalUnet1D(nn.Module):
         else:
             self.vit_config = network_config['vit_config']
             self.map_encoder = ViT(**self.vit_config)
-        
-        self.mlp_config = network_config['mlp_config']
-        self.env_cond = MLP(**self.mlp_config)
+
+        # MLP env encoder is optional; omit mlp_config from network_config to disable
+        if 'mlp_config' in network_config:
+            self.env_cond = MLP(**network_config['mlp_config'])
+        else:
+            self.env_cond = None
         
 
     def forward(
@@ -199,12 +202,9 @@ class ConditionalUnet1D(nn.Module):
         sample = sample.moveaxis(-1, -2)
         # (B,C,T)
         
-        # map_cond is a ViT input, env_cond is a MLP input
-        # (B, num_classes)
+        # map_cond is a CNN/ViT input
         map_cond_embed = self.map_encoder(map_cond)
-        # (B, 2 * obs_dim)
-        env_cond_embed = self.env_cond(env_cond)
-        
+
         # 1. time
         timesteps = timestep
         if not torch.is_tensor(timesteps):
@@ -216,7 +216,11 @@ class ConditionalUnet1D(nn.Module):
         timesteps = timesteps.expand(sample.shape[0])
 
         time_embed = self.diffusion_step_encoder(timesteps)
-        global_feature = torch.cat([time_embed, map_cond_embed, env_cond_embed], dim=-1) 
+        if self.env_cond is not None and env_cond is not None:
+            env_cond_embed = self.env_cond(env_cond)
+            global_feature = torch.cat([time_embed, map_cond_embed, env_cond_embed], dim=-1)
+        else:
+            global_feature = torch.cat([time_embed, map_cond_embed], dim=-1)
 
         x = sample
         h = []

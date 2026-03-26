@@ -3,31 +3,30 @@ class PlaneContinuousConfig:
     Config for continuous-space 2D path planning with diffusion.
 
     Key differences from PlaneTestEmbedConfig (grid version):
-        - map encoder : CNN (64×64 occupancy image → 128-dim latent)
-        - global_cond_dim = 128 (CNN) + 64 (MLP) = 192
+        - map encoder : CNN (64×64 3-channel map → 128-dim latent)
+          ch0=obstacles, ch1=start gaussian blob, ch2=goal gaussian blob
+        - global_cond_dim = 128 (CNN only, no MLP)
         - normalizer stats match continuous bounds [0, 8]
     """
 
     def __init__(self):
-        self.horizon    = 50        # number of trajectory waypoints (= interp_points)
+        self.horizon    = 48        # number of trajectory waypoints (= interp_points); must be divisible by 4
         self.action_dim = 2         # (x, y)
 
         self.network_config = {
             # --- UNet backbone ---
             'unet_config': {
                 'action_dim':     2,
-                'action_horizon': 50,
+                'action_horizon': 48,
             },
-            # --- CNN map encoder: (B, 1, 64, 64) -> (B, 128) ---
+            # --- CNN map encoder: (B, 3, 64, 64) -> (B, 128) ---
+            # ch0=obstacles, ch1=start blob, ch2=goal blob
             'cnn_config': {
-                'image_size': 64,
-                'output_dim': 128,
+                'image_size':  64,
+                'output_dim':  128,
+                'in_channels': 3,
             },
-            # --- MLP env encoder: [start, goal] -> (B, 64) ---
-            'mlp_config': {
-                'obs_dim':   2,
-                'embed_dim': 64,
-            },
+            # no mlp_config: start/goal encoded directly in map channels
         }
 
         self.noise_scheduler = {
