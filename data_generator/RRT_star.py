@@ -58,7 +58,8 @@ class RRTStar:
                 result[0]  = pruned[0]
                 result[-1] = pruned[-1]
                 return result
-        # ensure endpoints are exactly start and goal (spline may introduce tiny drift)
+        # clip to bounds (spline may drift slightly outside) then fix endpoints
+        smoothed = np.clip(smoothed, self.bounds[:, 0], self.bounds[:, 1])
         smoothed[0]  = pruned[0]
         smoothed[-1] = pruned[-1]
         return smoothed
@@ -166,8 +167,10 @@ class RRTStar:
         vec = x_to - x_from
         dist = np.linalg.norm(vec)
         if dist <= self.step_size:
-            return x_to.copy()
-        return x_from + (vec / dist) * self.step_size
+            x_new = x_to.copy()
+        else:
+            x_new = x_from + (vec / dist) * self.step_size
+        return np.clip(x_new, self.bounds[:, 0], self.bounds[:, 1])
     
     # Collision check (delegated to utils.dataset_utils)
     def _in_collision(self, point, obstacles):

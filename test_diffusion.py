@@ -16,7 +16,7 @@ import torch
 #   "continuous" – 64×64 3-channel map, CNN encoder
 MODE = "continuous"
 
-CKPT_NAME = "ckpt_ep14000.ckpt"
+CKPT_NAME = "ckpt_continuous_final.ckpt"
 
 
 # Original mode (unchanged)

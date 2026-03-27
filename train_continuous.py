@@ -25,6 +25,11 @@ INTERP_POINTS     = 48      # must match config horizon (must be divisible by 4)
 MAP_RES           = 64      # must match config cnn_config['image_size']
 BOUNDS            = [(0, 8), (0, 8)]
 
+MIN_OBSTACLES     = 5       # min number of circular obstacles per scenario
+MAX_OBSTACLES     = 12       # max number of circular obstacles per scenario
+RADIUS_MIN        = 0.3     # obstacle radius range (world units)
+RADIUS_MAX        = 0.8
+
 NUM_TRAIN_SAMPLES = 5000    # samples to train on; set to None to use the full dataset
 NUM_EPOCHS        = 20000
 SAVE_CKPT_EPOCH   = 1000
@@ -33,7 +38,8 @@ EVAL_EVERY        = 100     # generate visualization every N epochs
 
 # Eval helpers
 
-def make_random_scenario(bounds=BOUNDS, max_obstacles=5, max_attempts=100):
+def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacles=MAX_OBSTACLES,
+                         radius_min=RADIUS_MIN, radius_max=RADIUS_MAX, max_attempts=100):
     """Generate a random (occ_map, start, goal, gt_path) scenario using RRT*."""
     from data_generator.RRT_star import RRTStar
     from data_generator.data_generator import _line_blocked
@@ -48,9 +54,9 @@ def make_random_scenario(bounds=BOUNDS, max_obstacles=5, max_attempts=100):
             continue
 
         obstacles = []
-        for _ in range(np.random.randint(1, max_obstacles + 1)):
+        for _ in range(np.random.randint(min_obstacles, max_obstacles + 1)):
             center = np.random.uniform(bounds_arr[:, 0], bounds_arr[:, 1])
-            radius = np.random.uniform(0.3, 1.2)
+            radius = np.random.uniform(radius_min, radius_max)
             obstacles.append((center, radius))
 
         if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
@@ -141,7 +147,9 @@ def main():
         gen = DataGenerator2D(
             bounds=BOUNDS,
             num_samples=NUM_SAMPLES,
-            max_obstacles=5,
+            min_obstacles=MIN_OBSTACLES,
+            max_obstacles=MAX_OBSTACLES,
+            radius_range=(RADIUS_MIN, RADIUS_MAX),
             map_resolution=MAP_RES,
             interp_points=INTERP_POINTS,
             outfile=OUTFILE,

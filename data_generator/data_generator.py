@@ -20,7 +20,7 @@ def _line_blocked(start, goal, obstacles):
 
 def _worker(args):
     """Module-level worker for multiprocessing.Pool (must be picklable)."""
-    bounds, max_obstacles, max_iter, interp_points, map_resolution = args
+    bounds, min_obstacles, max_obstacles, max_iter, interp_points, map_resolution, radius_range = args
     rng = np.random.default_rng()
     bounds_arr = np.asarray(bounds, dtype=float)
     rrt = RRTStar(bounds=bounds)
@@ -33,9 +33,9 @@ def _worker(args):
             continue
 
         obstacles = []
-        for _ in range(rng.integers(1, max_obstacles + 1)):
+        for _ in range(rng.integers(min_obstacles, max_obstacles + 1)):
             center = rng.uniform(bounds_arr[:, 0], bounds_arr[:, 1])
-            radius = rng.uniform(0.3, 1.2)
+            radius = rng.uniform(*radius_range)
             obstacles.append((center, radius))
 
         if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
@@ -88,7 +88,9 @@ class DataGenerator2D:
         self,
         bounds,
         num_samples: int,
+        min_obstacles: int = 1,
         max_obstacles: int = 5,
+        radius_range: tuple = (0.3, 1.2),
         max_iter_per_sample: int = 100,
         map_resolution: int = 64,
         interp_points: int = 50,
@@ -96,7 +98,9 @@ class DataGenerator2D:
     ):
         self.bounds           = np.asarray(bounds, dtype=float)  # (2, 2)
         self.num_samples      = num_samples
+        self.min_obstacles    = min_obstacles
         self.max_obstacles    = max_obstacles
+        self.radius_range     = radius_range
         self.max_iter_per_sample = max_iter_per_sample
         self.map_resolution   = map_resolution
         self.interp_points    = interp_points
@@ -120,9 +124,9 @@ class DataGenerator2D:
                 continue
 
             obstacles = []
-            for _ in range(np.random.randint(1, self.max_obstacles + 1)):
+            for _ in range(np.random.randint(self.min_obstacles, self.max_obstacles + 1)):
                 center = np.random.uniform(self.bounds[:, 0], self.bounds[:, 1])
-                radius = np.random.uniform(0.3, 1.2)
+                radius = np.random.uniform(*self.radius_range)
                 obstacles.append((center, radius))
 
             if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
@@ -210,10 +214,12 @@ class DataGenerator2D:
 
         task_args = (
             self.bounds.tolist(),
+            self.min_obstacles,
             self.max_obstacles,
             self.max_iter_per_sample,
             self.interp_points,
             self.map_resolution,
+            self.radius_range,
         )
 
         # Submit num_workers * 10 tasks per round so the OS scheduler keeps all
