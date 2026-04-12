@@ -61,6 +61,11 @@ class PlaneContinuousConfig:
 
         self.is_CNN = True
 
+        self.data_generator = {
+            'crop':   True,   # RRT path shortcutting
+            'smooth': True,   # spline smoothing after shortcutting
+        }
+
     def to_dict(self):
         return {
             "network_config":  self.network_config,
@@ -70,4 +75,5 @@ class PlaneContinuousConfig:
             "horizon":         self.horizon,
             "action_dim":      self.action_dim,
             "is_CNN":          self.is_CNN,
+            "data_generator":  self.data_generator,
         }

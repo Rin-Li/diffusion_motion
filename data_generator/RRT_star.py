@@ -1,6 +1,7 @@
 import numpy as np
-from math import log
 import matplotlib.pyplot as plt
+from math import log
+from scipy.interpolate import splprep, splev
 from scipy.spatial import KDTree
 from utils.dataset_utils import circle_point_in_collision, circle_segment_dist
 
@@ -22,11 +23,7 @@ class RRTStar:
         self.gamma_star = gamma_star
         self.rng        = np.random.default_rng(rng)
         
-    def optimize_path(self, path, obstacles, interp_points: int = 30):
-
-        if path is None or len(path) < 2:
-            return False   
-
+    def _prune_path(self, path: np.ndarray, obstacles) -> np.ndarray:
         pruned = [path[0]]
         q_temp = path[0]
         for i in range(2, len(path)):
@@ -35,33 +32,28 @@ class RRTStar:
             pruned.append(path[i - 1])
             q_temp = path[i - 1]
         pruned.append(path[-1])
-        pruned = np.asarray(pruned)
+        return np.asarray(pruned)
 
-        if len(pruned) >= 2:
+    def _smooth_path(self, path: np.ndarray, obstacles, interp_points: int) -> np.ndarray:
+        if len(path) >= 2:
             try:
-                from scipy.interpolate import splprep, splev
-
-                k = min(3, len(pruned) - 1)
-                tck, _ = splprep(pruned.T, s=0, k=k)
-                u_new = np.linspace(0, 1, interp_points)
-                coords = splev(u_new, tck)
-                smoothed = np.stack(coords, axis=1)
-            except (ImportError, Exception):
-                smoothed = self._linear_interp(pruned, interp_points)
+                k = min(3, len(path) - 1)
+                tck, _ = splprep(path.T, s=0, k=k)
+                smoothed = np.stack(splev(np.linspace(0, 1, interp_points), tck), axis=1)
+            except Exception:
+                smoothed = self._linear_interp(path, interp_points)
         else:
-            smoothed = self._linear_interp(pruned, interp_points)
+            smoothed = self._linear_interp(path, interp_points)
 
         for a, b in zip(smoothed[:-1], smoothed[1:]):
             if not self._segment_collision_free(a, b, obstacles):
-                # spline clips obstacle — fall back to linear rather than discarding
-                result = self._linear_interp(pruned, interp_points)
-                result[0]  = pruned[0]
-                result[-1] = pruned[-1]
+                result = self._linear_interp(path, interp_points)
+                result[0]  = path[0]
+                result[-1] = path[-1]
                 return result
-        # clip to bounds (spline may drift slightly outside) then fix endpoints
         smoothed = np.clip(smoothed, self.bounds[:, 0], self.bounds[:, 1])
-        smoothed[0]  = pruned[0]
-        smoothed[-1] = pruned[-1]
+        smoothed[0]  = path[0]
+        smoothed[-1] = path[-1]
         return smoothed
 
     def _linear_interp(self, pts: np.ndarray, n_total: int):
@@ -79,14 +71,16 @@ class RRTStar:
         return smoothed
 
 
-    def plan(self, start, goal, obstacles, optimize: bool = False, interp_points: int = 30):
-        raw_path = self._plan_raw(start, goal, obstacles) 
+    def plan(self, start, goal, obstacles, prune: bool = True, smooth: bool = True, interp_points: int = 30):
+        raw_path = self._plan_raw(start, goal, obstacles)
         if raw_path is None:
             return None
-        if not optimize:
-            return raw_path
-        optimized = self.optimize_path(raw_path, obstacles, interp_points)
-        return optimized if optimized is not False else None
+        path = np.asarray(raw_path)
+        if prune:
+            path = self._prune_path(path, obstacles)
+        if smooth:
+            return self._smooth_path(path, obstacles, interp_points)
+        return self._linear_interp(path, interp_points)
     
     def _plan_raw(self, start, goal, obstacles):
         """Return path as [start, …, goal] or None on failure."""
@@ -230,13 +224,13 @@ def main():
         print("No path found in planning.")
         return
 
-    optimized = rrt.optimize_path(raw, obstacles, interp_points=50)
-    if optimized is False:
-        print("Optimization failed due to collision.")
+    optimized = rrt.plan(start, goal, obstacles, prune=True, smooth=True, interp_points=50)
+    if optimized is None:
+        print("Planning failed.")
         return
 
     print("Final optimized path length:", len(optimized))
-        
+
     rrt.visualize_path(bounds, obstacles, path=optimized, raw_path=raw, start=start, goal=goal)
 
 if __name__ == "__main__":

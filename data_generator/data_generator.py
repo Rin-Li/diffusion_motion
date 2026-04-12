@@ -1,7 +1,9 @@
 import numpy as np
-from data_generator.RRT_star import RRTStar
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from typing import Union
+
+from data_generator.RRT_star import RRTStar
 
 
 def _line_blocked(start, goal, obstacles):
@@ -20,7 +22,7 @@ def _line_blocked(start, goal, obstacles):
 
 def _worker(args):
     """Module-level worker for multiprocessing.Pool (must be picklable)."""
-    bounds, min_obstacles, max_obstacles, max_iter, interp_points, map_resolution, radius_range = args
+    bounds, min_obstacles, max_obstacles, max_iter, interp_points, map_resolution, radius_range, crop, smooth = args
     rng = np.random.default_rng()
     bounds_arr = np.asarray(bounds, dtype=float)
     rrt = RRTStar(bounds=bounds)
@@ -46,7 +48,7 @@ def _worker(args):
         if not _line_blocked(start, goal, obstacles):
             continue
 
-        path = rrt.plan(start, goal, obstacles, optimize=True, interp_points=interp_points)
+        path = rrt.plan(start, goal, obstacles, prune=crop, smooth=smooth, interp_points=interp_points)
         if path is None:
             continue
 
@@ -95,6 +97,8 @@ class DataGenerator2D:
         map_resolution: int = 64,
         interp_points: int = 50,
         outfile: Union[str, Path] = "rrt_dataset.npy",
+        crop: bool = True,
+        smooth: bool = True,
     ):
         self.bounds           = np.asarray(bounds, dtype=float)  # (2, 2)
         self.num_samples      = num_samples
@@ -106,6 +110,8 @@ class DataGenerator2D:
         self.interp_points    = interp_points
         self.rrt_star         = RRTStar(bounds=bounds)
         self.outfile          = Path(outfile)
+        self.crop             = crop
+        self.smooth           = smooth
 
         self.starts, self.goals = [], []
         self.paths, self.maps   = [], []
@@ -180,7 +186,7 @@ class DataGenerator2D:
             start, goal, obstacles = sample
             path = self.rrt_star.plan(
                 start, goal, obstacles,
-                optimize=True, interp_points=self.interp_points,
+                prune=self.crop, smooth=self.smooth, interp_points=self.interp_points,
             )
 
             if path is None:
@@ -204,9 +210,6 @@ class DataGenerator2D:
 
     def generate_mp(self, num_workers=None):
         """Generate dataset using a map-reduce pattern with multiprocessing.Pool."""
-        import math
-        from multiprocessing import Pool, cpu_count
-
         if num_workers is None:
             num_workers = cpu_count()
 
@@ -220,6 +223,8 @@ class DataGenerator2D:
             self.interp_points,
             self.map_resolution,
             self.radius_range,
+            self.crop,
+            self.smooth,
         )
 
         # Submit num_workers * 10 tasks per round so the OS scheduler keeps all

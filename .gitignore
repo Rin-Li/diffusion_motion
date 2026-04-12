@@ -14,3 +14,6 @@ dataset/train_continuous.npy
 train.log
 test_
 test_results_continuous.pdf
+.claude/
+dataset/train_data_set.npy
+intermediate_results_fm

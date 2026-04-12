@@ -1,46 +1,39 @@
-"""
-Continuous-space diffusion trajectory training script.
-
-Pipeline:
-  1. Data generation   — RRT* in continuous 2D space (multiprocessing), skipped if data exists
-  2. Dataset loading & normalization
-  3. Model construction — ConditionalUnet1D with CNN map encoder
-  4. Training           — DDPM with FiLM conditioning, with periodic visual evaluation
-  5. Inference test     — shape sanity check
-"""
-
-import sys
-sys.path.insert(0, '.')
-
 from pathlib import Path
+
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from core.datasets.plane_dataset_3ch import _gaussian_blob
 
-# Config
+from config.plane_fm import PlaneFMConfig
+from core.datasets.plane_dataset_3ch import PlanePlanningDataSets3Ch, _gaussian_blob
+from core.flow_matching import FlowMatching
+from core.flow_matching.policy import FlowMatchingPolicy
+from core.networks.embeddUnet import ConditionalUnet1D
+from core.trainer.flow_matching_trainer import FlowMatchingTrainer
+
+matplotlib.use('Agg')
+
 OUTFILE           = 'dataset/train_continuous.npy'
-GENERATE_DATA     = False   # True = force regenerate; False = skip if file exists
-NUM_SAMPLES       = 10000   # total samples to generate (only used when generating)
-INTERP_POINTS     = 48      # must match config horizon (must be divisible by 4)
-MAP_RES           = 64      # must match config cnn_config['image_size']
+GENERATE_DATA     = False
+NUM_SAMPLES       = 1000
+INTERP_POINTS     = 48
+MAP_RES           = 64
 BOUNDS            = [(0, 8), (0, 8)]
 
-MIN_OBSTACLES     = 5       # min number of circular obstacles per scenario
-MAX_OBSTACLES     = 12       # max number of circular obstacles per scenario
-RADIUS_MIN        = 0.3     # obstacle radius range (world units)
+MIN_OBSTACLES     = 5
+MAX_OBSTACLES     = 12
+RADIUS_MIN        = 0.3
 RADIUS_MAX        = 0.8
 
-NUM_TRAIN_SAMPLES = 5000    # samples to train on; set to None to use the full dataset
-NUM_EPOCHS        = 20000
-SAVE_CKPT_EPOCH   = 1000
-EVAL_EVERY        = 100     # generate visualization every N epochs
+NUM_TRAIN_SAMPLES = None
+NUM_EPOCHS        = 1000
+SAVE_CKPT_EPOCH   = 100
+EVAL_EVERY        = 100
 
-
-# Eval helpers
 
 def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacles=MAX_OBSTACLES,
                          radius_min=RADIUS_MIN, radius_max=RADIUS_MAX, max_attempts=100):
-    """Generate a random (occ_map, start, goal, gt_path) scenario using RRT*."""
     from data_generator.RRT_star import RRTStar
     from data_generator.data_generator import _line_blocked
 
@@ -63,7 +56,6 @@ def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacl
             continue
         if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
             continue
-
         if not _line_blocked(start, goal, obstacles):
             continue
 
@@ -71,7 +63,6 @@ def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacl
         if path is None:
             continue
 
-        # build 3-channel map: ch0=obstacles, ch1=start blob, ch2=goal blob
         res = MAP_RES
         xmin, xmax = bounds_arr[0]
         ymin, ymax = bounds_arr[1]
@@ -93,13 +84,7 @@ def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacl
     return None
 
 
-def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario):
-    """Return an eval callback: eval_fn(net, epoch) → saves PNG to save_dir/{fixed,random}/."""
-    import matplotlib
-    matplotlib.use('Agg')   # non-interactive backend, safe in training loop
-    import matplotlib.pyplot as plt
-    from core.diffusion.policy import PlaneDiffusionPolicy
-
+def make_eval_fn(fm, config_dict, config, save_dir, fixed_scenario):
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def _run_and_plot(net, scenario, tag, epoch):
@@ -107,25 +92,25 @@ def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario)
             return
         occ_map, start, goal, gt_path = scenario
 
-        policy = PlaneDiffusionPolicy(
-            model=net, noise_scheduler=noise_scheduler,
-            config=config_dict, device=DEVICE,
+        policy = FlowMatchingPolicy(
+            model=net, flow_matching=fm, config=config_dict, device=DEVICE,
         )
         obs_dict = {
-            'env': np.concatenate([start, goal]),  # kept for hard endpoint clamp
-            'map': occ_map,                        # (3, H, W) already
+            'env': np.concatenate([start, goal]),
+            'map': occ_map,
         }
-        initial_action = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
-        pred_path, _ = policy.predict_action(obs_dict, initial_action)
+        x0 = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
+        pred_path = policy.predict_action(obs_dict, x0)
 
         fig, ax = plt.subplots(figsize=(5, 5))
-        ax.imshow(occ_map[0], origin='lower', cmap='gray_r',   # ch0 = obstacles
+        ax.imshow(occ_map[0], origin='lower', cmap='gray_r',
                   extent=[BOUNDS[0][0], BOUNDS[0][1], BOUNDS[1][0], BOUNDS[1][1]])
         ax.plot(gt_path[:, 0],   gt_path[:, 1],   'b--', linewidth=1.5, label='ground truth')
-        ax.plot(pred_path[:, 0], pred_path[:, 1], 'r-',  linewidth=2.0, label='diffusion')
+        ax.plot(pred_path[:, 0], pred_path[:, 1], 'r-',  linewidth=2.0, label='flow matching')
         ax.scatter(*start, c='g', s=80, zorder=5, label='start')
         ax.scatter(*goal,  c='r', s=80, zorder=5, label='goal')
-        ax.set_xlim(BOUNDS[0]); ax.set_ylim(BOUNDS[1])
+        ax.set_xlim(BOUNDS[0])
+        ax.set_ylim(BOUNDS[1])
         ax.set_title(f'Epoch {epoch} — {tag}')
         ax.legend(fontsize=8)
         plt.tight_layout()
@@ -133,7 +118,7 @@ def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario)
         plt.close(fig)
 
     def eval_fn(net, epoch):
-        _run_and_plot(net, fixed_scenario,       'fixed',  epoch)
+        _run_and_plot(net, fixed_scenario,        'fixed',  epoch)
         _run_and_plot(net, make_random_scenario(), 'random', epoch)
 
     return eval_fn
@@ -141,13 +126,9 @@ def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario)
 
 def main():
     # 1. Config
-    from config.plane_continuous import PlaneContinuousConfig
-    from core.networks.embeddUnet import ConditionalUnet1D
-    from core.diffusion.builder import build_noise_scheduler_from_config
+    config      = PlaneFMConfig()
 
-    config      = PlaneContinuousConfig()
-
-    # 2. Data Generation
+    # 2. Data generation
     if GENERATE_DATA or not Path(OUTFILE).exists():
         from data_generator.data_generator import DataGenerator2D
         print(f'Generating {NUM_SAMPLES} samples → {OUTFILE}')
@@ -167,9 +148,7 @@ def main():
     else:
         print(f'Dataset found at {OUTFILE}, skipping generation.')
 
-    # 3. Dataset Loading
-    from core.datasets.plane_dataset_3ch import PlanePlanningDataSets3Ch
-
+    # 3. Dataset loading
     dataset = PlanePlanningDataSets3Ch(OUTFILE, bounds=BOUNDS)
     print(f'Dataset size : {len(dataset)}')
 
@@ -180,37 +159,35 @@ def main():
     sample = dataset[0]
     print('sample keys  :', list(sample.keys()))
     print('trajectory   :', sample['sample'].shape)
-    print('map          :', sample['map'].shape)   # (3, 64, 64)
+    print('map          :', sample['map'].shape)
 
-    # 4. Model Construction
+    # 4. Model construction
     config_dict = config.to_dict()
 
     cnn_output_dim = config.network_config['cnn_config']['output_dim']
 
     net = ConditionalUnet1D(
         input_dim       = config.action_dim,
-        global_cond_dim = cnn_output_dim,   # 128; no MLP term
+        global_cond_dim = cnn_output_dim,
         network_config  = config.network_config,
         is_cnn          = config.is_CNN,
     )
+    print(f'Total parameters: {sum(p.numel() for p in net.parameters()):,}')
 
-    noise_scheduler = build_noise_scheduler_from_config(config_dict)
-
-    total_params = sum(p.numel() for p in net.parameters())
-    print(f'Total parameters: {total_params:,}')
+    fm = FlowMatching(num_infer_steps=config.flow_matching['num_infer_steps'])
 
     # shape sanity check
     dummy_action = torch.randn(2, config.horizon, config.action_dim)
-    dummy_map    = torch.randn(2, 3, 64, 64)   # 3-channel
-    dummy_t      = torch.zeros(2).long()
+    dummy_map    = torch.randn(2, 3, 64, 64)
+    dummy_t      = torch.rand(2)
     out = net(dummy_action, dummy_t, dummy_map)
-    print(f'Forward pass output shape: {out.shape}')   # (2, 48, 2)
+    print(f'Forward pass output shape: {out.shape}')
 
     # 4. Setup eval & output directories
     ckpt_dir = Path('ckpt')
     ckpt_dir.mkdir(exist_ok=True)
 
-    viz_dir = Path('intermediate_results')
+    viz_dir = Path('intermediate_results_fm')
     (viz_dir / 'fixed').mkdir(parents=True, exist_ok=True)
     (viz_dir / 'random').mkdir(parents=True, exist_ok=True)
 
@@ -219,17 +196,10 @@ def main():
     while fixed_scenario is None:
         fixed_scenario = make_random_scenario()
 
-    eval_fn = make_eval_fn(noise_scheduler, config_dict, config, viz_dir, fixed_scenario)
+    eval_fn = make_eval_fn(fm, config_dict, config, viz_dir, fixed_scenario)
 
     # 5. Training
-    from core.trainer.plane_diffusion_trainer_embeed import PlaneDiffusionTrainer
-
-    trainer = PlaneDiffusionTrainer(
-        net     = net,
-        dataset = dataset,
-        config  = config,
-    )
-
+    trainer = FlowMatchingTrainer(net=net, dataset=dataset, config=config)
     trainer.train(
         num_epochs      = NUM_EPOCHS,
         save_ckpt_epoch = SAVE_CKPT_EPOCH,
@@ -237,38 +207,30 @@ def main():
         eval_every      = EVAL_EVERY,
     )
 
-    trainer.save_checkpoint(str(ckpt_dir / 'ckpt_continuous_final.ckpt'))
+    trainer.save_checkpoint('ckpt/fm_final.ckpt')
     print('Training complete.')
 
     # 6. Inference test
-    from core.diffusion.policy import PlaneDiffusionPolicy
-
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    policy = PlaneDiffusionPolicy(
-        model           = net,
-        noise_scheduler = noise_scheduler,
-        config          = config_dict,
-        device          = DEVICE,
+    policy = FlowMatchingPolicy(
+        model=net, flow_matching=fm, config=config_dict, device=DEVICE,
     )
 
     raw_data = np.load(OUTFILE, allow_pickle=True).item()
     test_idx = 10
-
-    start_t = raw_data['start'][test_idx]
-    goal_t  = raw_data['goal'][test_idx]
-    occ_t   = raw_data['map'][test_idx]   # (H, W)
-    ch1_t   = _gaussian_blob(start_t, BOUNDS, shape=occ_t.shape)
-    ch2_t   = _gaussian_blob(goal_t,  BOUNDS, shape=occ_t.shape)
-    map3_t  = np.stack([occ_t, ch1_t, ch2_t], axis=0)   # (3, H, W)
+    start_t  = raw_data['start'][test_idx]
+    goal_t   = raw_data['goal'][test_idx]
+    occ_t    = raw_data['map'][test_idx]
+    ch1_t    = _gaussian_blob(start_t, BOUNDS, shape=occ_t.shape)
+    ch2_t    = _gaussian_blob(goal_t,  BOUNDS, shape=occ_t.shape)
+    map3_t   = np.stack([occ_t, ch1_t, ch2_t], axis=0)   # (3, H, W)
 
     obs_dict = {
-        'env': np.concatenate([start_t, goal_t]),   # for hard clamp
-        'map': map3_t,                               # (3, H, W)
+        'env': np.concatenate([start_t, goal_t]),
+        'map': map3_t,
     }
-
-    initial_action = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
-    pred_path, _ = policy.predict_action(obs_dict, initial_action)
+    x0 = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
+    pred_path = policy.predict_action(obs_dict, x0)
     print('Predicted path shape:', pred_path.shape)
 
 

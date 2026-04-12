@@ -44,7 +44,7 @@ class DataGeneratorGrid:
         )
         self._data: Dict[str, list] = {"start": [], "goal": [], "paths": [], "map": []}
 
-    def generate(self, smooth: bool = True, interp: int = 100) -> Dict[str, np.ndarray]:
+    def generate(self, smooth: bool = False, crop: bool = True, interp: int = 100) -> Dict[str, np.ndarray]:
         """
         Run RRT* to collect `num_samples` successful trajectories.
 
@@ -83,7 +83,7 @@ class DataGeneratorGrid:
                     rng=self.rng,
                 )
                 path = planner.plan(
-                    start, goal, prune=True, optimize=smooth, interp_points=interp
+                    start, goal, prune=crop, optimize=smooth, interp_points=interp
                 )
 
                 if path is None:
