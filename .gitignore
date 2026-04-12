@@ -17,3 +17,5 @@ test_results_continuous.pdf
 .claude/
 dataset/train_data_set.npy
 intermediate_results_fm
+test_results_fm.pdf
+nohup.out

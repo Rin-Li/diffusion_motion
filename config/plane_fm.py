@@ -42,7 +42,7 @@ class PlaneFMConfig:
 
         self.data_generator = {
             'crop':   True,   # RRT path shortcutting
-            'smooth': True,   # spline smoothing after shortcutting
+            'smooth': False,   # spline smoothing after shortcutting
         }
 
     def to_dict(self):

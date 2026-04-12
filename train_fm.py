@@ -16,20 +16,20 @@ matplotlib.use('Agg')
 
 OUTFILE           = 'dataset/train_continuous.npy'
 GENERATE_DATA     = False
-NUM_SAMPLES       = 1000
+NUM_SAMPLES       = 10000
 INTERP_POINTS     = 48
 MAP_RES           = 64
 BOUNDS            = [(0, 8), (0, 8)]
 
 MIN_OBSTACLES     = 5
-MAX_OBSTACLES     = 12
+MAX_OBSTACLES     = 10
 RADIUS_MIN        = 0.3
 RADIUS_MAX        = 0.8
 
 NUM_TRAIN_SAMPLES = None
-NUM_EPOCHS        = 1000
-SAVE_CKPT_EPOCH   = 100
-EVAL_EVERY        = 100
+NUM_EPOCHS        = 20000
+SAVE_CKPT_EPOCH   = 10000
+EVAL_EVERY        = 500
 
 
 def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacles=MAX_OBSTACLES,
@@ -102,19 +102,23 @@ def make_eval_fn(fm, config_dict, config, save_dir, fixed_scenario):
         x0 = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
         pred_path = policy.predict_action(obs_dict, x0)
 
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.imshow(occ_map[0], origin='lower', cmap='gray_r',
-                  extent=[BOUNDS[0][0], BOUNDS[0][1], BOUNDS[1][0], BOUNDS[1][1]])
-        ax.plot(gt_path[:, 0],   gt_path[:, 1],   'b--', linewidth=1.5, label='ground truth')
-        ax.plot(pred_path[:, 0], pred_path[:, 1], 'r-',  linewidth=2.0, label='flow matching')
-        ax.scatter(*start, c='g', s=80, zorder=5, label='start')
-        ax.scatter(*goal,  c='r', s=80, zorder=5, label='goal')
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.set_facecolor('#F7F7F7')
+        ax.imshow(occ_map[0], origin='lower', cmap='Greys', interpolation='bilinear',
+                  extent=[BOUNDS[0][0], BOUNDS[0][1], BOUNDS[1][0], BOUNDS[1][1]], vmin=0, vmax=1)
+        ax.plot(gt_path[:, 0],   gt_path[:, 1],   color='#5C6BC0', linestyle='--', linewidth=2.0,  label='ground truth')
+        ax.plot(pred_path[:, 0], pred_path[:, 1], color='#EF6C00', linestyle='-',  linewidth=2.5,  label='flow matching')
+        ax.scatter(*start, color='#43A047', marker='*', s=250, zorder=6, label='start')
+        ax.scatter(*goal,  color='#E53935', marker='D', s=120, zorder=6, label='goal')
         ax.set_xlim(BOUNDS[0])
         ax.set_ylim(BOUNDS[1])
-        ax.set_title(f'Epoch {epoch} — {tag}')
-        ax.legend(fontsize=8)
-        plt.tight_layout()
-        fig.savefig(save_dir / tag / f'epoch_{epoch:05d}.png', dpi=100)
+        ax.set_xticks([]); ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_title(f'Epoch {epoch}  —  {tag}', fontsize=11, fontweight='bold', pad=8)
+        ax.legend(fontsize=9, framealpha=0.85, loc='upper right')
+        plt.subplots_adjust(left=0.02, right=0.98, top=0.93, bottom=0.02)
+        fig.savefig(save_dir / tag / f'epoch_{epoch:05d}.png', dpi=180)
         plt.close(fig)
 
     def eval_fn(net, epoch):
