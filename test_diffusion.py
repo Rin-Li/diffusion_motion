@@ -2,7 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from utils.scenario_utils import create_test_scenario, generate_path
-from utils.viz_utils import show_multiple_with_collision_colors
+from utils.viz_utils import (
+    MNP_INSPIRED_PALETTE,
+    draw_circle_obstacles,
+    draw_start_goal,
+    show_multiple_with_collision_colors,
+    style_continuous_axis,
+)
 from utils.dataset_utils import validate_path_circle_collision_free
 from core.diffusion.policy import PlaneDiffusionPolicy
 from core.diffusion.builder import build_noise_scheduler_from_config
@@ -187,25 +193,28 @@ def show_continuous_results(obstacles_list, path_list, start_list, goal_list, bo
         goal_reached = goal_dist < 0.5
 
         if is_cf and goal_reached:
-            color, status = "blue", "SUCCESS"
+            color, status = MNP_INSPIRED_PALETTE["success"], "SUCCESS"
             success_count += 1
         elif is_cf:
-            color, status = "orange", "NO GOAL"
+            color, status = MNP_INSPIRED_PALETTE["no_goal"], "NO GOAL"
         else:
-            color, status = "red", "COLLISION"
+            color, status = MNP_INSPIRED_PALETTE["collision"], "COLLISION"
             collision_count += 1
 
-        ax.set_aspect("equal")
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        for c, r in obstacles:
-            ax.add_patch(plt.Circle(c, r, color="gray", alpha=0.5))
+        style_continuous_axis(ax, (xmin, xmax), (ymin, ymax))
+        draw_circle_obstacles(ax, obstacles)
         ax.plot(path[:, 0], path[:, 1], color=color, linewidth=2, alpha=0.8)
-        ax.scatter(path[:, 0], path[:, 1], color=color, s=10, alpha=0.6)
-        ax.plot(start[0], start[1], "go", ms=8)
-        ax.plot(goal[0],  goal[1],  "ro", ms=8)
+        ax.scatter(
+            path[:, 0],
+            path[:, 1],
+            color=color,
+            s=10,
+            alpha=0.55,
+            edgecolors=MNP_INSPIRED_PALETTE["path_marker"],
+            linewidths=0.2,
+        )
+        draw_start_goal(ax, start, goal)
         ax.set_title(f"#{i}: {status}\nGoal dist: {goal_dist:.2f}")
-        ax.grid(True, alpha=0.3)
 
     for i in range(n, len(axes)):
         axes[i].set_visible(False)

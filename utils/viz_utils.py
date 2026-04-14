@@ -19,6 +19,71 @@ import torch
 from utils.dataset_utils import validate_path_collision_free
 
 
+MNP_INSPIRED_PALETTE = {
+    "background": "#F6F4FB",
+    "obstacle_fill": "#8E7CC3",
+    "obstacle_edge": "#6F5AA8",
+    "start": "#2F6BFF",
+    "goal": "#E24A4A",
+    "success": "#4C6EF5",
+    "no_goal": "#F59F00",
+    "collision": "#E03131",
+    "path_marker": "#FFFFFF",
+    "grid": "#D8D2EA",
+}
+
+
+def style_continuous_axis(ax, xlim, ylim, *, show_grid=True):
+    """Apply the shared visual style for continuous-space plots."""
+    ax.set_aspect("equal")
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_facecolor(MNP_INSPIRED_PALETTE["background"])
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if show_grid:
+        ax.grid(True, color=MNP_INSPIRED_PALETTE["grid"], alpha=0.45, linewidth=0.7)
+
+
+def draw_circle_obstacles(ax, obstacles, *, alpha=0.42):
+    """Draw circular obstacles with the shared softened purple style."""
+    for center, radius in obstacles:
+        ax.add_patch(
+            plt.Circle(
+                center,
+                radius,
+                facecolor=MNP_INSPIRED_PALETTE["obstacle_fill"],
+                edgecolor=MNP_INSPIRED_PALETTE["obstacle_edge"],
+                linewidth=1.2,
+                alpha=alpha,
+            )
+        )
+
+
+def draw_start_goal(ax, start, goal, *, size=42):
+    """Draw mnp-style start/goal points as simple blue/red circles."""
+    ax.scatter(
+        start[0],
+        start[1],
+        c=MNP_INSPIRED_PALETTE["start"],
+        s=size,
+        zorder=5,
+        edgecolors="white",
+        linewidths=0.8,
+    )
+    ax.scatter(
+        goal[0],
+        goal[1],
+        c=MNP_INSPIRED_PALETTE["goal"],
+        s=size,
+        zorder=5,
+        edgecolors="white",
+        linewidths=0.8,
+    )
+
+
 def show_multiple_with_collision_colors(
     grid_list, path_list, start_list, goal_list, indices, cols=5
 ):
@@ -125,16 +190,18 @@ def visualize_result(trajectory, start, goal, obstacles, save_path=None):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    ax1.imshow(obs_np, origin="lower", cmap="gray_r", extent=[0, 8, 0, 8], alpha=0.5)
-    ax1.plot(start_np[0], start_np[1], "go", markersize=10, label="Start")
-    ax1.plot(goal_np[0], goal_np[1], "ro", markersize=10, label="Goal")
-    ax1.set_xlim(0, 8)
-    ax1.set_ylim(0, 8)
+    ax1.imshow(
+        obs_np,
+        origin="lower",
+        cmap="Purples",
+        extent=[0, 8, 0, 8],
+        alpha=0.3,
+        vmin=0.0,
+        vmax=1.0,
+    )
+    draw_start_goal(ax1, start_np, goal_np, size=55)
+    style_continuous_axis(ax1, (0, 8), (0, 8))
     ax1.set_title("Generated Trajectory")
-    ax1.set_xticks(np.arange(0, 9))
-    ax1.set_yticks(np.arange(0, 9))
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
 
     ax2.set_xlabel("Time step")
     ax2.set_ylabel("Position")
@@ -175,18 +242,33 @@ def visualize_trajectory_gif(
     frames = []
     for step_idx, traj in enumerate(action_history):
         fig, ax = plt.subplots(figsize=(5, 5))
+        ax.set_facecolor(MNP_INSPIRED_PALETTE["background"])
         ax.imshow(
-            obstacles, cmap="gray_r", origin="lower",
-            extent=[0, obstacles.shape[1], 0, obstacles.shape[0]], alpha=0.25,
+            obstacles,
+            cmap="Purples",
+            origin="lower",
+            extent=[0, obstacles.shape[1], 0, obstacles.shape[0]],
+            alpha=0.25,
+            vmin=0.0,
+            vmax=1.0,
         )
-        ax.plot(traj[:, 0], traj[:, 1], "b-", linewidth=2, label="Path")
-        ax.scatter(traj[:, 0], traj[:, 1], c="blue", s=12, alpha=0.7)
-        ax.scatter(start[0], start[1], c="green", s=80, marker="o", label="Start")
-        ax.scatter(goal[0], goal[1], c="red", s=80, marker="o", label="Goal")
-        ax.set_xlim(0, obstacles.shape[1])
-        ax.set_ylim(0, obstacles.shape[0])
+        ax.plot(
+            traj[:, 0],
+            traj[:, 1],
+            color=MNP_INSPIRED_PALETTE["success"],
+            linewidth=2,
+            label="Path",
+        )
+        ax.scatter(
+            traj[:, 0],
+            traj[:, 1],
+            c=MNP_INSPIRED_PALETTE["success"],
+            s=12,
+            alpha=0.7,
+        )
+        draw_start_goal(ax, start, goal, size=80)
+        style_continuous_axis(ax, (0, obstacles.shape[1]), (0, obstacles.shape[0]))
         ax.set_title(f"Diffusion step {step_idx}/{len(action_history) - 1}")
-        ax.grid(True, alpha=0.3)
         ax.legend(loc="upper right", fontsize="small")
 
         buf = io.BytesIO()
