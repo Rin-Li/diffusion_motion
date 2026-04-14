@@ -12,6 +12,8 @@ from core.flow_matching import FlowMatching
 from core.flow_matching.policy import FlowMatchingPolicy
 from core.networks.embedUnet import ConditionalUnet1D
 from core.trainer.flow_matching_trainer import FlowMatchingTrainer
+from data_generator.RRT_star import RRTStar
+from utils.scenario_utils import line_blocked
 from utils.wandb_utils import init_wandb
 
 matplotlib.use('Agg')
@@ -28,7 +30,7 @@ MAX_OBSTACLES     = 10
 RADIUS_MIN        = 0.3
 RADIUS_MAX        = 0.8
 
-NUM_TRAIN_SAMPLES = None
+NUM_TRAIN_SAMPLES = 1000
 NUM_EPOCHS        = 20000
 SAVE_CKPT_EPOCH   = 10000
 EVAL_EVERY        = 500
@@ -36,9 +38,6 @@ EVAL_EVERY        = 500
 
 def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacles=MAX_OBSTACLES,
                          radius_min=RADIUS_MIN, radius_max=RADIUS_MAX, max_attempts=100):
-    from data_generator.RRT_star import RRTStar
-    from data_generator.data_generator import _line_blocked
-
     bounds_arr = np.asarray(bounds, dtype=float)
     rrt = RRTStar(bounds=bounds)
 
@@ -58,7 +57,7 @@ def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacl
             continue
         if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
             continue
-        if not _line_blocked(start, goal, obstacles):
+        if not line_blocked(start, goal, obstacles):
             continue
 
         path = rrt.plan(start, goal, obstacles, prune=True, smooth=True, interp_points=INTERP_POINTS)

@@ -4,20 +4,7 @@ from pathlib import Path
 from typing import Union
 
 from data_generator.RRT_star import RRTStar
-
-
-def _line_blocked(start, goal, obstacles):
-    """Return True if the straight line start→goal is blocked by at least one obstacle circle."""
-    d = goal - start
-    length = np.linalg.norm(d)
-    if length < 1e-10:
-        return False
-    d_unit = d / length
-    for c, r in obstacles:
-        t = np.clip(np.dot(c - start, d_unit), 0, length)
-        if np.linalg.norm(start + t * d_unit - c) <= r:
-            return True
-    return False
+from utils.scenario_utils import line_blocked as _line_blocked
 
 
 def _worker(args):

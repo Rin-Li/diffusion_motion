@@ -24,7 +24,7 @@ class PlaneFMConfig:
         }
 
         self.flow_matching = {
-            'num_infer_steps': 10,
+            'num_infer_steps': 20,
         }
 
         self.normalizer = {

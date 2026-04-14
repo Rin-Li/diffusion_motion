@@ -8,6 +8,7 @@ from core.datasets.plane_dataset_3ch import _gaussian_blob
 from core.flow_matching import FlowMatching, FlowMatchingPolicy
 from core.networks.embedUnet import ConditionalUnet1D
 from utils.dataset_utils import validate_path_circle_collision_free
+from utils.scenario_utils import line_blocked
 
 CKPT_NAME  = "fm_final.ckpt"
 NUM_TESTS  = 100
@@ -40,6 +41,8 @@ def create_test_scenario(rng):
         if any(np.linalg.norm(start - c) <= r for c, r in obstacles):
             continue
         if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
+            continue
+        if not line_blocked(start, goal, obstacles):
             continue
 
         occ = np.zeros((MAP_RES, MAP_RES), dtype=np.float32)
