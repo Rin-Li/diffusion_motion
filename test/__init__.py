@@ -1,2 +1,6 @@
-from .dataset_test import *
-from .network_embedd_test import *
+"""
+Test package marker.
+
+Avoid importing modules at package import time to prevent side effects.
+Run tests directly as modules instead.
+"""

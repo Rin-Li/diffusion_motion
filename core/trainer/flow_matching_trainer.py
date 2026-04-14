@@ -8,6 +8,7 @@ from tqdm.auto import tqdm
 from typing import Optional
 
 from core.flow_matching.fm import FlowMatching
+from utils.xcloud_utils import sample_point_cloud_from_grid
 
 
 class FlowMatchingTrainer:
@@ -17,6 +18,7 @@ class FlowMatchingTrainer:
         dataset: torch.utils.data.Dataset,
         config,
         device: Optional[str] = None,
+        wandb_run=None,
     ):
         self.net = net
         self.config = config.to_dict()
@@ -24,6 +26,7 @@ class FlowMatchingTrainer:
             num_infer_steps=self.config['flow_matching']['num_infer_steps']
         )
         self.device = 'cuda' if torch.cuda.is_available() and device is None else device
+        self.wandb_run = wandb_run
 
         self.net.to(self.device)
 
@@ -50,13 +53,31 @@ class FlowMatchingTrainer:
         self.scaler = torch.amp.GradScaler('cuda', enabled=self._use_amp)
 
     def prepare_inputs(self, batch):
-        # action: (B, T, D)   map_cond: (B, 3, H, W)
+        # action: (B, T, D)   map_cond: (B, C, H, W)
         action   = batch['sample'].to(self.device, dtype=torch.float32)
         map_cond = batch['map'].to(self.device, dtype=torch.float32)
         batch_size = action.shape[0]
-        return map_cond, action, batch_size
 
-    def optimization_step(self, action, map_cond, batch_size):
+        xcloud = None
+        networks = self.config.get("network_config", self.config.get("networks", {}))
+        use_xcloud = bool(networks.get("use_xcloud", False))
+        if use_xcloud:
+            if "xcloud" in batch:
+                xcloud = batch["xcloud"].to(self.device, dtype=torch.float32)
+            else:
+                total_points = networks.get("xcloud_encoder", {}).get("total_points", 128)
+                xcloud_list = []
+                map_np = map_cond.detach().cpu().numpy()
+                for i in range(map_np.shape[0]):
+                    xcloud_np = sample_point_cloud_from_grid(map_np[i], total_points)
+                    xcloud_list.append(xcloud_np)
+                xcloud = torch.from_numpy(np.stack(xcloud_list, axis=0)).to(self.device, dtype=torch.float32)
+
+        return map_cond, action, batch_size, xcloud
+
+    def optimization_step(self, action, map_cond, batch_size, xcloud=None):
+        self.optimizer.zero_grad()
+
         x1 = action                                                   # (B, T, D)
         x0 = torch.randn_like(x1)                                     # (B, T, D)
         t  = self.fm.sample_timesteps(batch_size, self.device)        # (B,)
@@ -66,13 +87,12 @@ class FlowMatchingTrainer:
         v_target = self.fm.get_velocity_target(x0, x1)               # (B, T, D)
 
         with torch.amp.autocast('cuda', enabled=self._use_amp):
-            v_pred = self.net(sample=xt, timestep=t, map_cond=map_cond)
+            v_pred = self.net(sample=xt, timestep=t, map_cond=map_cond, xcloud=xcloud)
             loss = F.mse_loss(v_pred, v_target)
 
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optimizer)
         self.scaler.update()
-        self.optimizer.zero_grad()
         self.lr_scheduler.step()
 
         if self.use_ema:
@@ -98,16 +118,28 @@ class FlowMatchingTrainer:
             for epoch_idx in tglobal:
                 epoch_loss = []
                 with tqdm(self.dataloader, desc='Batch', leave=False) as tepoch:
-                    for nbatch in tepoch:
-                        map_cond, action, B = self.prepare_inputs(nbatch)
-                        loss = self.optimization_step(action, map_cond, B)
+                    for batch_idx, nbatch in enumerate(tepoch):
+                        map_cond, action, B, xcloud = self.prepare_inputs(nbatch)
+                        loss = self.optimization_step(action, map_cond, B, xcloud)
                         loss_cpu = loss.item()
                         epoch_loss.append(loss_cpu)
                         tepoch.set_postfix(loss=loss_cpu)
+                        if self.wandb_run is not None:
+                            lr = self.optimizer.param_groups[0]["lr"]
+                            global_step = epoch_idx * len(self.dataloader) + batch_idx
+                            self.wandb_run.log(
+                                {"train/loss": loss_cpu, "train/lr": lr},
+                                step=global_step,
+                            )
 
                 mean_loss = np.mean(epoch_loss)
                 tglobal.set_postfix(loss=mean_loss)
                 trn_loss.append(mean_loss)
+                if self.wandb_run is not None:
+                    self.wandb_run.log(
+                        {"train/epoch_loss": mean_loss},
+                        step=(epoch_idx + 1) * len(self.dataloader),
+                    )
 
                 if (epoch_idx + 1) % save_ckpt_epoch == 0:
                     self.save_checkpoint(f'ckpt/fm_ep{epoch_idx + 1}.ckpt')

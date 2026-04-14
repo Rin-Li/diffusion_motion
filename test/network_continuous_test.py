@@ -3,7 +3,7 @@ sys.path.insert(0, '.')
 
 import torch
 from config.plane_continuous import PlaneContinuousConfig
-from core.networks.embeddUnet import ConditionalUnet1D
+from core.networks.embedUnet import ConditionalUnet1D
 
 config = PlaneContinuousConfig()
 

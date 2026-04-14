@@ -8,6 +8,7 @@ from core.networks.helpers import SinusoidalPosEmb
 from core.networks.vit import ViT
 from core.networks.MLP import MLP
 from core.networks.CNN import CNN
+from core.networks.pointnet import PointCloudEncoder
 
 
 
@@ -170,18 +171,31 @@ class ConditionalUnet1D(nn.Module):
         self.up_modules = up_modules
         self.down_modules = down_modules
         self.final_conv = final_conv
-        if is_cnn:
-            cnn_config = network_config.get('cnn_config', {})
-            self.map_encoder = CNN(**cnn_config)
-        else:
-            self.vit_config = network_config['vit_config']
-            self.map_encoder = ViT(**self.vit_config)
-
         # MLP env encoder is optional; omit mlp_config from network_config to disable
-        if 'mlp_config' in network_config:
-            self.env_cond = MLP(**network_config['mlp_config'])
+        if "mlp_config" in network_config:
+            self.env_cond = MLP(**network_config["mlp_config"])
         else:
             self.env_cond = None
+
+        self.use_xcloud = bool(network_config.get("use_xcloud", False))
+        self.xcloud_config = network_config.get(
+            "xcloud_encoder", {"point_dim": 2, "hidden_dims": [64, 128], "embed_dim": 64}
+        )
+        if self.use_xcloud:
+            xcloud_cfg = dict(self.xcloud_config)
+            xcloud_cfg.pop("total_points", None)
+            self.xcloud_encoder = PointCloudEncoder(**xcloud_cfg)
+        else:
+            self.xcloud_encoder = None
+
+        self.map_encoder = None
+        if not self.use_xcloud:
+            if is_cnn:
+                cnn_config = network_config.get("cnn_config", {})
+                self.map_encoder = CNN(**cnn_config)
+            else:
+                self.vit_config = network_config["vit_config"]
+                self.map_encoder = ViT(**self.vit_config)
         
 
     def forward(
@@ -189,22 +203,33 @@ class ConditionalUnet1D(nn.Module):
         sample: torch.Tensor,
         timestep: Union[torch.Tensor, float, int],
         map_cond=None,
-        env_cond=None
+        env_cond=None,
+        xcloud=None,
     ):
         """
         x: (B,T,input_dim)
         timestep: (B,) or int, diffusion step
         map_cond: (B,map_cond(B, 1, 8, 8))
         env_cond: (B, env_cond(B, start: {obs_dim}, goal: {obs_dim}))
+        xcloud: (B, N, 2) optional point cloud
         output: (B,T,input_dim)
         """
         # (B,T,C)
         sample = sample.moveaxis(-1, -2)
         # (B,C,T)
         
-        # map_cond is a CNN/ViT input
-        map_cond_embed = self.map_encoder(map_cond)
+        env_cond_embed = None
+        if self.env_cond is not None and env_cond is not None:
+            env_cond_embed = self.env_cond(env_cond)
 
+        if self.use_xcloud:
+            if self.xcloud_encoder is None:
+                raise ValueError("xcloud_encoder is not initialized but use_xcloud is True.")
+            xcloud_embed = self.xcloud_encoder(xcloud)
+        else:
+            if self.map_encoder is None:
+                raise ValueError("map_encoder is not initialized and use_xcloud is False.")
+            xcloud_embed = self.map_encoder(map_cond)
         # 1. time
         timesteps = timestep
         if not torch.is_tensor(timesteps):
@@ -216,11 +241,10 @@ class ConditionalUnet1D(nn.Module):
         timesteps = timesteps.expand(sample.shape[0])
 
         time_embed = self.diffusion_step_encoder(timesteps)
-        if self.env_cond is not None and env_cond is not None:
-            env_cond_embed = self.env_cond(env_cond)
-            global_feature = torch.cat([time_embed, map_cond_embed, env_cond_embed], dim=-1)
+        if env_cond_embed is not None:
+            global_feature = torch.cat([time_embed, xcloud_embed, env_cond_embed], dim=-1)
         else:
-            global_feature = torch.cat([time_embed, map_cond_embed], dim=-1)
+            global_feature = torch.cat([time_embed, xcloud_embed], dim=-1)
 
         x = sample
         h = []

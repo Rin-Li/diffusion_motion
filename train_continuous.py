@@ -12,10 +12,12 @@ Pipeline:
 import sys
 sys.path.insert(0, '.')
 
+import argparse
 from pathlib import Path
 import numpy as np
 import torch
 from core.datasets.plane_dataset_3ch import _gaussian_blob
+from utils.wandb_utils import init_wandb
 
 # Config
 OUTFILE           = 'dataset/train_continuous.npy'
@@ -144,12 +146,33 @@ def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", default=None)
+    parser.add_argument("--wandb-entity", default=None)
+    parser.add_argument("--wandb-name", default=None)
+    parser.add_argument("--wandb-tags", default=None, help="Comma-separated tags")
+    parser.add_argument("--wandb-notes", default=None)
+    args = parser.parse_args()
+
     # 1. Config
     from config.plane_continuous import PlaneContinuousConfig
-    from core.networks.embeddUnet import ConditionalUnet1D
+    from core.networks.embedUnet import ConditionalUnet1D
     from core.diffusion.builder import build_noise_scheduler_from_config
 
     config      = PlaneContinuousConfig()
+    config_dict = config.to_dict()
+
+    wandb_run = init_wandb(
+        args.wandb,
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=args.wandb_name,
+        tags=args.wandb_tags,
+        notes=args.wandb_notes,
+        config=config_dict,
+        group="continuous",
+    )
 
     # 2. Data Generation
     if GENERATE_DATA or not Path(OUTFILE).exists():
@@ -180,6 +203,17 @@ def main():
     if NUM_TRAIN_SAMPLES is not None:
         dataset = torch.utils.data.Subset(dataset, range(NUM_TRAIN_SAMPLES))
     print(f'Training on  : {len(dataset)} samples')
+    if wandb_run is not None:
+        wandb_run.config.update(
+            {
+                "num_epochs": NUM_EPOCHS,
+                "save_ckpt_epoch": SAVE_CKPT_EPOCH,
+                "eval_every": EVAL_EVERY,
+                "num_train_samples": NUM_TRAIN_SAMPLES,
+                "dataset_size": len(dataset),
+            },
+            allow_val_change=True,
+        )
 
     sample = dataset[0]
     print('sample keys  :', list(sample.keys()))
@@ -187,8 +221,6 @@ def main():
     print('map          :', sample['map'].shape)   # (3, 64, 64)
 
     # 4. Model Construction
-    config_dict = config.to_dict()
-
     cnn_output_dim = config.network_config['cnn_config']['output_dim']
 
     net = ConditionalUnet1D(
@@ -226,12 +258,13 @@ def main():
     eval_fn = make_eval_fn(noise_scheduler, config_dict, config, viz_dir, fixed_scenario)
 
     # 5. Training
-    from core.trainer.plane_diffusion_trainer_embeed import PlaneDiffusionTrainer
+    from core.trainer.plane_diffusion_trainer_embed import PlaneDiffusionTrainer
 
     trainer = PlaneDiffusionTrainer(
         net     = net,
         dataset = dataset,
         config  = config,
+        wandb_run=wandb_run,
     )
 
     trainer.train(
@@ -274,6 +307,8 @@ def main():
     initial_action = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
     pred_path, _ = policy.predict_action(obs_dict, initial_action)
     print('Predicted path shape:', pred_path.shape)
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == '__main__':

@@ -1,2 +1,2 @@
-from .plane_test_embeed import PlaneTestEmbedConfig
+from .plane_test_embed import PlaneTestEmbedConfig
 

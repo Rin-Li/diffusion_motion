@@ -17,6 +17,20 @@ from utils.dataset_utils import (
 )
 
 
+def line_blocked(start, goal, obstacles):
+    """Return True if the straight line start→goal is blocked by at least one obstacle circle."""
+    d = goal - start
+    length = np.linalg.norm(d)
+    if length < 1e-10:
+        return False
+    d_unit = d / length
+    for c, r in obstacles:
+        t = np.clip(np.dot(c - start, d_unit), 0, length)
+        if np.linalg.norm(start + t * d_unit - c) <= r:
+            return True
+    return False
+
+
 def create_test_scenario(bounds, cell_size, origin, rng, max_rectangles, device="cuda"):
     """
     Sample a random obstacle map and a collision-free (start, goal) pair.
@@ -82,6 +96,12 @@ def generate_path(policy, start, goal, obstacles, initial_action=None):
         "env": np.concatenate([start_np, goal_np]),  # [2 * obs_dim]
         "map": obstacles[0].cpu().numpy(),            # [1, H, W]
     }
+
+    networks = policy.config.get("network_config", policy.config.get("networks", {}))
+    if networks.get("use_xcloud", False):
+        from utils.xcloud_utils import sample_point_cloud_from_grid
+        total_points = networks.get("xcloud_encoder", {}).get("total_points", 128)
+        obs_dict["xcloud"] = sample_point_cloud_from_grid(obs_dict["map"], total_points)
 
     trajectory, trajectory_all = policy.predict_action(obs_dict, initial_action)
 

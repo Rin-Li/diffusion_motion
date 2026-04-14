@@ -4,13 +4,17 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import argparse
 
 from config.plane_fm import PlaneFMConfig
 from core.datasets.plane_dataset_3ch import PlanePlanningDataSets3Ch, _gaussian_blob
 from core.flow_matching import FlowMatching
 from core.flow_matching.policy import FlowMatchingPolicy
-from core.networks.embeddUnet import ConditionalUnet1D
+from core.networks.embedUnet import ConditionalUnet1D
 from core.trainer.flow_matching_trainer import FlowMatchingTrainer
+from data_generator.RRT_star import RRTStar
+from utils.scenario_utils import line_blocked
+from utils.wandb_utils import init_wandb
 
 matplotlib.use('Agg')
 
@@ -26,17 +30,14 @@ MAX_OBSTACLES     = 10
 RADIUS_MIN        = 0.3
 RADIUS_MAX        = 0.8
 
-NUM_TRAIN_SAMPLES = None
-NUM_EPOCHS        = 20000
+NUM_TRAIN_SAMPLES = 1000
+NUM_EPOCHS        = 2000
 SAVE_CKPT_EPOCH   = 10000
 EVAL_EVERY        = 500
 
 
 def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacles=MAX_OBSTACLES,
                          radius_min=RADIUS_MIN, radius_max=RADIUS_MAX, max_attempts=100):
-    from data_generator.RRT_star import RRTStar
-    from data_generator.data_generator import _line_blocked
-
     bounds_arr = np.asarray(bounds, dtype=float)
     rrt = RRTStar(bounds=bounds)
 
@@ -56,7 +57,7 @@ def make_random_scenario(bounds=BOUNDS, min_obstacles=MIN_OBSTACLES, max_obstacl
             continue
         if any(np.linalg.norm(goal  - c) <= r for c, r in obstacles):
             continue
-        if not _line_blocked(start, goal, obstacles):
+        if not line_blocked(start, goal, obstacles):
             continue
 
         path = rrt.plan(start, goal, obstacles, prune=True, smooth=True, interp_points=INTERP_POINTS)
@@ -129,8 +130,29 @@ def make_eval_fn(fm, config_dict, config, save_dir, fixed_scenario):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", default=None)
+    parser.add_argument("--wandb-entity", default=None)
+    parser.add_argument("--wandb-name", default=None)
+    parser.add_argument("--wandb-tags", default=None, help="Comma-separated tags")
+    parser.add_argument("--wandb-notes", default=None)
+    args = parser.parse_args()
+
     # 1. Config
     config      = PlaneFMConfig()
+    config_dict = config.to_dict()
+
+    wandb_run = init_wandb(
+        args.wandb,
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=args.wandb_name,
+        tags=args.wandb_tags,
+        notes=args.wandb_notes,
+        config=config_dict,
+        group="flow-matching",
+    )
 
     # 2. Data generation
     if GENERATE_DATA or not Path(OUTFILE).exists():
@@ -159,6 +181,17 @@ def main():
     if NUM_TRAIN_SAMPLES is not None:
         dataset = torch.utils.data.Subset(dataset, range(NUM_TRAIN_SAMPLES))
     print(f'Training on  : {len(dataset)} samples')
+    if wandb_run is not None:
+        wandb_run.config.update(
+            {
+                "num_epochs": NUM_EPOCHS,
+                "save_ckpt_epoch": SAVE_CKPT_EPOCH,
+                "eval_every": EVAL_EVERY,
+                "num_train_samples": NUM_TRAIN_SAMPLES,
+                "dataset_size": len(dataset),
+            },
+            allow_val_change=True,
+        )
 
     sample = dataset[0]
     print('sample keys  :', list(sample.keys()))
@@ -166,13 +199,14 @@ def main():
     print('map          :', sample['map'].shape)
 
     # 4. Model construction
-    config_dict = config.to_dict()
-
-    cnn_output_dim = config.network_config['cnn_config']['output_dim']
+    if config.network_config.get('use_xcloud', False):
+        global_cond_dim = config.network_config['xcloud_encoder']['embed_dim']
+    else:
+        global_cond_dim = config.network_config['cnn_config']['output_dim']
 
     net = ConditionalUnet1D(
         input_dim       = config.action_dim,
-        global_cond_dim = cnn_output_dim,
+        global_cond_dim = global_cond_dim,
         network_config  = config.network_config,
         is_cnn          = config.is_CNN,
     )
@@ -184,7 +218,9 @@ def main():
     dummy_action = torch.randn(2, config.horizon, config.action_dim)
     dummy_map    = torch.randn(2, 3, 64, 64)
     dummy_t      = torch.rand(2)
-    out = net(dummy_action, dummy_t, dummy_map)
+    total_points = config.network_config.get('xcloud_encoder', {}).get('total_points', 128)
+    dummy_xcloud = torch.randn(2, total_points, 2) if config.network_config.get('use_xcloud', False) else None
+    out = net(dummy_action, dummy_t, dummy_map, xcloud=dummy_xcloud)
     print(f'Forward pass output shape: {out.shape}')
 
     # 4. Setup eval & output directories
@@ -203,7 +239,12 @@ def main():
     eval_fn = make_eval_fn(fm, config_dict, config, viz_dir, fixed_scenario)
 
     # 5. Training
-    trainer = FlowMatchingTrainer(net=net, dataset=dataset, config=config)
+    trainer = FlowMatchingTrainer(
+        net=net,
+        dataset=dataset,
+        config=config,
+        wandb_run=wandb_run,
+    )
     trainer.train(
         num_epochs      = NUM_EPOCHS,
         save_ckpt_epoch = SAVE_CKPT_EPOCH,
@@ -236,6 +277,8 @@ def main():
     x0 = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
     pred_path = policy.predict_action(obs_dict, x0)
     print('Predicted path shape:', pred_path.shape)
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == '__main__':
