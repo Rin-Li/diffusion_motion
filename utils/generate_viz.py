@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+ROOT = Path(__file__).parent.parent
 
 import matplotlib
 matplotlib.use('Agg')
@@ -26,8 +27,7 @@ from utils.viz_utils import (
     style_continuous_axis,
 )
 
-ROOT = Path(__file__).parent
-OUT  = ROOT / 'res'
+OUT  = ROOT / 'res' / 'tmp'
 OUT.mkdir(exist_ok=True)
 
 BOUNDS     = [(0, 8), (0, 8)]

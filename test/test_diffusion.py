@@ -1,7 +1,10 @@
+from pathlib import Path
+ROOT = Path(__file__).parent.parent
+
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
-from utils.scenario_utils import create_test_scenario, generate_path
+import torch
+from utils.scenario_utils import create_test_scenario, generate_path, line_blocked
 from utils.viz_utils import (
     MNP_INSPIRED_PALETTE,
     draw_circle_obstacles,
@@ -9,9 +12,6 @@ from utils.viz_utils import (
     show_multiple_with_collision_colors,
     style_continuous_axis,
 )
-import torch
-from utils.scenario_utils import create_test_scenario, generate_path, line_blocked
-from utils.viz_utils import show_multiple_with_collision_colors
 from utils.dataset_utils import validate_path_circle_collision_free
 from utils.xcloud_utils import sample_point_cloud_from_grid
 from core.datasets.plane_dataset_3ch import _gaussian_blob
@@ -298,7 +298,7 @@ def test_diffusion_continue(policy, config_dict, num_tests=20, device='cuda'):
 # Main entry point
 
 def main():
-    ckpt_path = Path(__file__).parent / "ckpt" / CKPT_NAME
+    ckpt_path = ROOT / "ckpt" / CKPT_NAME
     device    = "cuda"
 
     if MODE == "original":

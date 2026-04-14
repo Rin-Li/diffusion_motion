@@ -1,14 +1,3 @@
-"""
-Visualize 200 random samples from the continuous dataset.
-Saves a multi-page PDF to test/dataset_continuous_viz.pdf.
-
-Usage (from repo root):
-    python test/test_dataset_continuous.py
-"""
-
-import sys
-sys.path.insert(0, '.')
-
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')

@@ -1,7 +1,9 @@
+from pathlib import Path
+ROOT = Path(__file__).parent.parent
+
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from pathlib import Path
 
 from config.plane_fm import PlaneFMConfig
 from core.datasets.plane_dataset_3ch import _gaussian_blob
@@ -136,7 +138,7 @@ def show_results(obstacles_list, path_list, start_list, goal_list, cols=5, outfi
 
 
 def main():
-    ckpt_path = Path(__file__).parent / "ckpt" / CKPT_NAME
+    ckpt_path = ROOT / "ckpt" / CKPT_NAME
 
     config      = PlaneFMConfig()
     config_dict = config.to_dict()
