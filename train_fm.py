@@ -4,6 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import argparse
 
 from config.plane_fm import PlaneFMConfig
 from core.datasets.plane_dataset_3ch import PlanePlanningDataSets3Ch, _gaussian_blob
@@ -11,6 +12,7 @@ from core.flow_matching import FlowMatching
 from core.flow_matching.policy import FlowMatchingPolicy
 from core.networks.embedUnet import ConditionalUnet1D
 from core.trainer.flow_matching_trainer import FlowMatchingTrainer
+from utils.wandb_utils import init_wandb
 
 matplotlib.use('Agg')
 
@@ -129,8 +131,29 @@ def make_eval_fn(fm, config_dict, config, save_dir, fixed_scenario):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", default=None)
+    parser.add_argument("--wandb-entity", default=None)
+    parser.add_argument("--wandb-name", default=None)
+    parser.add_argument("--wandb-tags", default=None, help="Comma-separated tags")
+    parser.add_argument("--wandb-notes", default=None)
+    args = parser.parse_args()
+
     # 1. Config
     config      = PlaneFMConfig()
+    config_dict = config.to_dict()
+
+    wandb_run = init_wandb(
+        args.wandb,
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=args.wandb_name,
+        tags=args.wandb_tags,
+        notes=args.wandb_notes,
+        config=config_dict,
+        group="flow-matching",
+    )
 
     # 2. Data generation
     if GENERATE_DATA or not Path(OUTFILE).exists():
@@ -159,6 +182,17 @@ def main():
     if NUM_TRAIN_SAMPLES is not None:
         dataset = torch.utils.data.Subset(dataset, range(NUM_TRAIN_SAMPLES))
     print(f'Training on  : {len(dataset)} samples')
+    if wandb_run is not None:
+        wandb_run.config.update(
+            {
+                "num_epochs": NUM_EPOCHS,
+                "save_ckpt_epoch": SAVE_CKPT_EPOCH,
+                "eval_every": EVAL_EVERY,
+                "num_train_samples": NUM_TRAIN_SAMPLES,
+                "dataset_size": len(dataset),
+            },
+            allow_val_change=True,
+        )
 
     sample = dataset[0]
     print('sample keys  :', list(sample.keys()))
@@ -166,8 +200,6 @@ def main():
     print('map          :', sample['map'].shape)
 
     # 4. Model construction
-    config_dict = config.to_dict()
-
     cnn_output_dim = config.network_config['cnn_config']['output_dim']
 
     net = ConditionalUnet1D(
@@ -203,7 +235,12 @@ def main():
     eval_fn = make_eval_fn(fm, config_dict, config, viz_dir, fixed_scenario)
 
     # 5. Training
-    trainer = FlowMatchingTrainer(net=net, dataset=dataset, config=config)
+    trainer = FlowMatchingTrainer(
+        net=net,
+        dataset=dataset,
+        config=config,
+        wandb_run=wandb_run,
+    )
     trainer.train(
         num_epochs      = NUM_EPOCHS,
         save_ckpt_epoch = SAVE_CKPT_EPOCH,
@@ -236,6 +273,8 @@ def main():
     x0 = torch.randn(1, config.horizon, config.action_dim, device=DEVICE)
     pred_path = policy.predict_action(obs_dict, x0)
     print('Predicted path shape:', pred_path.shape)
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == '__main__':

@@ -13,6 +13,14 @@ class PlaneFMConfig:
                 'output_dim':  128,
                 'in_channels': 3,
             },
+            # Point-cloud encoder is optional. If use_xcloud=True, map encoders (CNN/ViT) are ignored.
+            'xcloud_encoder': {
+                'point_dim': 2,
+                'hidden_dims': [64, 128],
+                'embed_dim': 64,
+                'total_points': 128,
+            },
+            'use_xcloud': False,
         }
 
         self.flow_matching = {

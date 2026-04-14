@@ -24,13 +24,19 @@ def build_dataloader_from_dataset_and_config(config: Dict, dataset: torch.utils.
 
 class PlaneDiffusionTrainer:
     def __init__(
-        self, net: nn.Module, dataset: PlanePlanningDataSets, config: Dict, device: Optional[str] = None
+        self,
+        net: nn.Module,
+        dataset: PlanePlanningDataSets,
+        config: Dict,
+        device: Optional[str] = None,
+        wandb_run=None,
     ):
         self.net = net
         self.config = config.to_dict()
         self.noise_scheduler = build_noise_scheduler_from_config(self.config)
         self.dataset = dataset
         self.device = 'cuda' if torch.cuda.is_available() and device is None else device
+        self.wandb_run = wandb_run
 
         self.net.to(self.device)
 
@@ -139,7 +145,7 @@ class PlaneDiffusionTrainer:
                 epoch_loss = list()
                 # batch loop
                 with tqdm(self.dataloader, desc="Batch", leave=False) as tepoch:
-                    for nbatch in tepoch:
+                    for batch_idx, nbatch in enumerate(tepoch):
                         map_cond, env_cond, action, B, xcloud = self.prepare_inputs(nbatch)
                         loss = self.optimization_step(action, map_cond, env_cond, B, xcloud)
 
@@ -147,9 +153,21 @@ class PlaneDiffusionTrainer:
                         loss_cpu = loss.item()
                         epoch_loss.append(loss_cpu)
                         tepoch.set_postfix(loss=loss_cpu)
+                        if self.wandb_run is not None:
+                            lr = self.optimizer.param_groups[0]["lr"]
+                            global_step = epoch_idx * len(self.dataloader) + batch_idx
+                            self.wandb_run.log(
+                                {"train/loss": loss_cpu, "train/lr": lr},
+                                step=global_step,
+                            )
 
                 tglobal.set_postfix(loss=np.mean(epoch_loss))
                 trn_loss.append(np.mean(epoch_loss))
+                if self.wandb_run is not None:
+                    self.wandb_run.log(
+                        {"train/epoch_loss": trn_loss[-1]},
+                        step=(epoch_idx + 1) * len(self.dataloader),
+                    )
 
                 # save intermediate ckpt
                 if (epoch_idx + 1) % save_ckpt_epoch == 0:
