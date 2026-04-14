@@ -16,7 +16,7 @@ from utils.viz_utils import (
 )
 from utils.scenario_utils import line_blocked
 
-CKPT_NAME  = "fm_final.ckpt"
+CKPT_NAME  = "fm_final_1.ckpt"
 NUM_TESTS  = 100
 BOUNDS     = np.array([[0.0, 8.0], [0.0, 8.0]])
 MAP_RES    = 64
