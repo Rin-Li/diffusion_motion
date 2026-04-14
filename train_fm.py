@@ -31,7 +31,7 @@ RADIUS_MIN        = 0.3
 RADIUS_MAX        = 0.8
 
 NUM_TRAIN_SAMPLES = 1000
-NUM_EPOCHS        = 20000
+NUM_EPOCHS        = 2000
 SAVE_CKPT_EPOCH   = 10000
 EVAL_EVERY        = 500
 
@@ -199,11 +199,14 @@ def main():
     print('map          :', sample['map'].shape)
 
     # 4. Model construction
-    cnn_output_dim = config.network_config['cnn_config']['output_dim']
+    if config.network_config.get('use_xcloud', False):
+        global_cond_dim = config.network_config['xcloud_encoder']['embed_dim']
+    else:
+        global_cond_dim = config.network_config['cnn_config']['output_dim']
 
     net = ConditionalUnet1D(
         input_dim       = config.action_dim,
-        global_cond_dim = cnn_output_dim,
+        global_cond_dim = global_cond_dim,
         network_config  = config.network_config,
         is_cnn          = config.is_CNN,
     )
@@ -215,7 +218,9 @@ def main():
     dummy_action = torch.randn(2, config.horizon, config.action_dim)
     dummy_map    = torch.randn(2, 3, 64, 64)
     dummy_t      = torch.rand(2)
-    out = net(dummy_action, dummy_t, dummy_map)
+    total_points = config.network_config.get('xcloud_encoder', {}).get('total_points', 128)
+    dummy_xcloud = torch.randn(2, total_points, 2) if config.network_config.get('use_xcloud', False) else None
+    out = net(dummy_action, dummy_t, dummy_map, xcloud=dummy_xcloud)
     print(f'Forward pass output shape: {out.shape}')
 
     # 4. Setup eval & output directories

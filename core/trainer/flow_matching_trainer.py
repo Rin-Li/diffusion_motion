@@ -76,6 +76,8 @@ class FlowMatchingTrainer:
         return map_cond, action, batch_size, xcloud
 
     def optimization_step(self, action, map_cond, batch_size, xcloud=None):
+        self.optimizer.zero_grad()
+
         x1 = action                                                   # (B, T, D)
         x0 = torch.randn_like(x1)                                     # (B, T, D)
         t  = self.fm.sample_timesteps(batch_size, self.device)        # (B,)
@@ -91,7 +93,6 @@ class FlowMatchingTrainer:
         self.scaler.scale(loss).backward()
         self.scaler.step(self.optimizer)
         self.scaler.update()
-        self.optimizer.zero_grad()
         self.lr_scheduler.step()
 
         if self.use_ema:
