@@ -7,7 +7,8 @@ from tqdm.auto import tqdm
 from typing import Dict, Optional
 
 from core.diffusion.diffusion import build_noise_scheduler_from_config
-from core.datasets.plane_dataset_embeed import PlanePlanningDataSets
+from core.datasets.plane_dataset_embed import PlanePlanningDataSets
+from utils.xcloud_utils import sample_point_cloud_from_grid
 
 
 def build_dataloader_from_dataset_and_config(config: Dict, dataset: torch.utils.data.Dataset):
@@ -63,9 +64,29 @@ class PlaneDiffusionTrainer:
         map_cond = batch["map"].to(self.device, dtype=torch.float32)       # condition: map image
         batch_size = action.shape[0]
 
-        return map_cond, action, batch_size
+        env_cond = batch.get("env", None)
+        if env_cond is not None:
+            env_cond = env_cond.to(self.device, dtype=torch.float32)
 
-    def optimization_step(self, action, map_cond, batch_size):
+        xcloud = None
+        networks = self.config.get("network_config", self.config.get("networks", {}))
+        use_xcloud = bool(networks.get("use_xcloud", False))
+        if use_xcloud:
+            if "xcloud" in batch:
+                xcloud = batch["xcloud"].to(self.device, dtype=torch.float32)
+            else:
+                total_points = networks.get("xcloud_encoder", {}).get("total_points", 128)
+                # build xcloud from occupancy grid
+                xcloud_list = []
+                map_np = map_cond.detach().cpu().numpy()
+                for i in range(map_np.shape[0]):
+                    xcloud_np = sample_point_cloud_from_grid(map_np[i], total_points)
+                    xcloud_list.append(xcloud_np)
+                xcloud = torch.from_numpy(np.stack(xcloud_list, axis=0)).to(self.device, dtype=torch.float32)
+
+        return map_cond, env_cond, action, batch_size, xcloud
+
+    def optimization_step(self, action, map_cond, env_cond, batch_size, xcloud=None):
         # sample noise to add to actions
         noise = torch.randn(action.shape, device=self.device)
 
@@ -78,9 +99,9 @@ class PlaneDiffusionTrainer:
         # (this is the forward diffusion process)
         noisy_actions = self.noise_scheduler.add_noise(action, noise, timesteps)
 
-        # forward pass under mixed precision (env_cond=None → 3-channel map mode)
+        # forward pass under mixed precision
         with torch.amp.autocast('cuda', enabled=self._use_amp):
-            noise_pred = self.net(noisy_actions, timesteps, map_cond)
+            noise_pred = self.net(noisy_actions, timesteps, map_cond, env_cond, xcloud)
             loss = nn.functional.mse_loss(noise_pred, noise)
 
         # optimize with gradient scaler (no-op when AMP disabled)
@@ -119,8 +140,8 @@ class PlaneDiffusionTrainer:
                 # batch loop
                 with tqdm(self.dataloader, desc="Batch", leave=False) as tepoch:
                     for nbatch in tepoch:
-                        map_cond, action, B = self.prepare_inputs(nbatch)
-                        loss = self.optimization_step(action, map_cond, B)
+                        map_cond, env_cond, action, B, xcloud = self.prepare_inputs(nbatch)
+                        loss = self.optimization_step(action, map_cond, env_cond, B, xcloud)
 
                         # logging
                         loss_cpu = loss.item()
@@ -148,4 +169,3 @@ class PlaneDiffusionTrainer:
         if self.config["trainer"]["use_ema"]:
             self.ema.copy_to(save_model.parameters())
         torch.save(save_model.state_dict(), path)
-

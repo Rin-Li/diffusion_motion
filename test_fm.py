@@ -6,7 +6,7 @@ from pathlib import Path
 from config.plane_fm import PlaneFMConfig
 from core.datasets.plane_dataset_3ch import _gaussian_blob
 from core.flow_matching import FlowMatching, FlowMatchingPolicy
-from core.networks.embeddUnet import ConditionalUnet1D
+from core.networks.embedUnet import ConditionalUnet1D
 from utils.dataset_utils import validate_path_circle_collision_free
 
 CKPT_NAME  = "fm_final.ckpt"

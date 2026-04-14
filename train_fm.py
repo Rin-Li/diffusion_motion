@@ -9,7 +9,7 @@ from config.plane_fm import PlaneFMConfig
 from core.datasets.plane_dataset_3ch import PlanePlanningDataSets3Ch, _gaussian_blob
 from core.flow_matching import FlowMatching
 from core.flow_matching.policy import FlowMatchingPolicy
-from core.networks.embeddUnet import ConditionalUnet1D
+from core.networks.embedUnet import ConditionalUnet1D
 from core.trainer.flow_matching_trainer import FlowMatchingTrainer
 
 matplotlib.use('Agg')

@@ -83,6 +83,12 @@ def generate_path(policy, start, goal, obstacles, initial_action=None):
         "map": obstacles[0].cpu().numpy(),            # [1, H, W]
     }
 
+    networks = policy.config.get("network_config", policy.config.get("networks", {}))
+    if networks.get("use_xcloud", False):
+        from utils.xcloud_utils import sample_point_cloud_from_grid
+        total_points = networks.get("xcloud_encoder", {}).get("total_points", 128)
+        obs_dict["xcloud"] = sample_point_cloud_from_grid(obs_dict["map"], total_points)
+
     trajectory, trajectory_all = policy.predict_action(obs_dict, initial_action)
 
     return torch.tensor(trajectory, device=device).unsqueeze(0), trajectory_all

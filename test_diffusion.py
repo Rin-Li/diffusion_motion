@@ -6,8 +6,8 @@ from utils.viz_utils import show_multiple_with_collision_colors
 from utils.dataset_utils import validate_path_circle_collision_free
 from core.diffusion.policy import PlaneDiffusionPolicy
 from core.diffusion.builder import build_noise_scheduler_from_config
-from core.networks.embeddUnet import ConditionalUnet1D
-from config.plane_test_embeed import PlaneTestEmbedConfig
+from core.networks.embedUnet import ConditionalUnet1D
+from config.plane_test_embed import PlaneTestEmbedConfig
 from config.plane_continuous import PlaneContinuousConfig
 import torch
 
@@ -267,6 +267,10 @@ def test_diffusion_continue(policy, config_dict, num_tests=20, device='cuda'):
                 "env": np.concatenate([start_np, goal_np]),  # used only for hard clamp
                 "map": map3,                                  # (3, 64, 64)
             }
+            if config.network_config.get("use_xcloud", False):
+                from utils.xcloud_utils import sample_point_cloud_from_grid
+                total_points = config.network_config.get("xcloud_encoder", {}).get("total_points", 128)
+                obs_dict["xcloud"] = sample_point_cloud_from_grid(map3, total_points)
             trajectory, _ = policy.predict_action(obs_dict, initial_action)
 
             obstacles_list.append(obstacles)
@@ -296,14 +300,24 @@ def main():
     device    = "cuda"
 
     if MODE == "original":
-        print("=== Mode: original (grid 8×8, ViT/MLP) ===")
+        print("=== Mode: original (grid 8×8) ===")
         config     = PlaneTestEmbedConfig()
         config_dict = config.to_dict()
 
+        if config.network_config.get("use_xcloud", False):
+            global_cond_dim = (
+                config.network_config["xcloud_encoder"]["embed_dim"] +
+                config.network_config["mlp_config"]["embed_dim"]
+            )
+        else:
+            global_cond_dim = (
+                config.network_config["vit_config"]["num_classes"] +
+                config.network_config["mlp_config"]["embed_dim"]
+            )
+
         net = ConditionalUnet1D(
             input_dim       = config.network_config["unet_config"]["action_dim"],
-            global_cond_dim = (config.network_config["vit_config"]["num_classes"] +
-                               config.network_config["mlp_config"]["embed_dim"]),
+            global_cond_dim = global_cond_dim,
             network_config  = config.network_config,
             is_cnn          = config.is_CNN,
         )

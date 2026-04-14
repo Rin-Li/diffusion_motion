@@ -146,7 +146,7 @@ def make_eval_fn(noise_scheduler, config_dict, config, save_dir, fixed_scenario)
 def main():
     # 1. Config
     from config.plane_continuous import PlaneContinuousConfig
-    from core.networks.embeddUnet import ConditionalUnet1D
+    from core.networks.embedUnet import ConditionalUnet1D
     from core.diffusion.builder import build_noise_scheduler_from_config
 
     config      = PlaneContinuousConfig()
@@ -226,7 +226,7 @@ def main():
     eval_fn = make_eval_fn(noise_scheduler, config_dict, config, viz_dir, fixed_scenario)
 
     # 5. Training
-    from core.trainer.plane_diffusion_trainer_embeed import PlaneDiffusionTrainer
+    from core.trainer.plane_diffusion_trainer_embed import PlaneDiffusionTrainer
 
     trainer = PlaneDiffusionTrainer(
         net     = net,

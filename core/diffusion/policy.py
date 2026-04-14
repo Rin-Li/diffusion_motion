@@ -31,6 +31,7 @@ class PlaneDiffusionPolicy:
             obs_dict: {
                 "env": np.ndarray [2 * obs_dim]  — concatenated [start, goal],
                 "map": np.ndarray [1, H, W]      — obstacle map,
+                "xcloud": np.ndarray [N, 2]      — optional point cloud,
             }
             initial_action: torch.Tensor [1, pred_horizon, action_dim] — Gaussian noise seed.
 
@@ -49,12 +50,34 @@ class PlaneDiffusionPolicy:
         else:
             env_cond = None
 
+        networks = self.config.get("network_config", self.config.get("networks", {}))
+        use_xcloud = bool(networks.get("use_xcloud", False))
+
         # 2. map (1-channel or 3-channel depending on mode)
-        map_cond = (
-            torch.from_numpy(np.asarray(obs_dict["map"], dtype=np.float32))
-            .to(self.device)
-            .unsqueeze(0)
-        )  # [1, C, H, W]
+        map_cond = None
+        if "map" in obs_dict and obs_dict["map"] is not None:
+            map_cond = (
+                torch.from_numpy(np.asarray(obs_dict["map"], dtype=np.float32))
+                .to(self.device)
+                .unsqueeze(0)
+            )  # [1, C, H, W]
+
+        # 3. xcloud (preferred when enabled)
+        xcloud = None
+        if use_xcloud:
+            if "xcloud" in obs_dict:
+                xcloud = (
+                    torch.from_numpy(np.asarray(obs_dict["xcloud"], dtype=np.float32))
+                    .to(self.device)
+                    .unsqueeze(0)
+                )
+            elif map_cond is not None:
+                from utils.xcloud_utils import sample_point_cloud_from_grid
+                total_points = networks.get("xcloud_encoder", {}).get("total_points", 128)
+                xcloud_np = sample_point_cloud_from_grid(obs_dict["map"], total_points)
+                xcloud = torch.from_numpy(xcloud_np).to(self.device).unsqueeze(0)
+            else:
+                raise ValueError("use_xcloud is enabled but no xcloud/map provided in obs_dict.")
 
         # 3. initialize action sequence from provided noise
         naction = initial_action
@@ -77,7 +100,8 @@ class PlaneDiffusionPolicy:
                 sample=naction,
                 timestep=t,
                 map_cond=map_cond,
-                env_cond=env_cond,   # None when using 3-channel map mode
+                env_cond=env_cond,
+                xcloud=xcloud,
             )
             if self.use_single_step_inference:
                 naction = initial_action - noise_pred

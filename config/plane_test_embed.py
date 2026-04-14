@@ -11,6 +11,13 @@ class PlaneTestEmbedConfig:
                 'obs_dim': 2,
                 'embed_dim': 64
             },
+            'xcloud_encoder': {
+                'point_dim': 2,
+                'hidden_dims': [64, 128],
+                'embed_dim': 64,
+                'total_points': 128
+            },
+            'use_xcloud': True,
             'vit_config': {
                 'image_size': 8,
                 'patch_size': 4,

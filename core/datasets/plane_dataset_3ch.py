@@ -14,7 +14,7 @@ encoded in the map image. The 'env' key is kept only for external use
 import torch
 import numpy as np
 
-from core.datasets.plane_dataset_embeed import get_data_stats, normalize_data
+from core.datasets.plane_dataset_embed import get_data_stats, normalize_data
 
 
 def _gaussian_blob(center_xy, bounds, shape=(64, 64), sigma=2.0):
