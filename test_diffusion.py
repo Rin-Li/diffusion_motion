@@ -1,15 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from utils.scenario_utils import create_test_scenario, generate_path
+import torch
+from utils.scenario_utils import create_test_scenario, generate_path, line_blocked
 from utils.viz_utils import show_multiple_with_collision_colors
 from utils.dataset_utils import validate_path_circle_collision_free
+from utils.xcloud_utils import sample_point_cloud_from_grid
+from core.datasets.plane_dataset_3ch import _gaussian_blob
 from core.diffusion.policy import PlaneDiffusionPolicy
 from core.diffusion.builder import build_noise_scheduler_from_config
 from core.networks.embedUnet import ConditionalUnet1D
 from config.plane_test_embed import PlaneTestEmbedConfig
 from config.plane_continuous import PlaneContinuousConfig
-import torch
 
 # HYPERPARAMETER: choose test mode
 #   "original"   – grid-based 8×8 map, ViT/MLP encoder
@@ -87,18 +89,6 @@ def test_diffusion_policy(policy, config_dict, num_tests=20, device='cuda',):
 
 # Continuous mode helpers
 
-def _gaussian_blob_np(center_xy, bounds, shape=(64, 64), sigma=2.0):
-    """Rasterize a 2-D gaussian blob centred at center_xy (world coords)."""
-    xmin, xmax = bounds[0]
-    ymin, ymax = bounds[1]
-    H, W = shape
-    cx = (center_xy[0] - xmin) / (xmax - xmin) * (W - 1)
-    cy = (center_xy[1] - ymin) / (ymax - ymin) * (H - 1)
-    gx, gy = np.meshgrid(np.arange(W), np.arange(H))
-    blob = np.exp(-((gx - cx) ** 2 + (gy - cy) ** 2) / (2 * sigma ** 2))
-    return blob.astype(np.float32)
-
-
 def create_test_scenario_continuous(bounds, rng, max_obstacles=5, map_resolution=64, device='cuda'):
     """
     Sample a random scenario with circular obstacles for continuous mode.
@@ -134,6 +124,8 @@ def create_test_scenario_continuous(bounds, rng, max_obstacles=5, map_resolution
             continue
         if any(np.linalg.norm(goal - c) <= r for c, r in obstacles):
             continue
+        if not line_blocked(start, goal, obstacles):
+            continue
 
         # Build 64×64 occupancy map (circular obstacles)
         occ = np.zeros((res, res), dtype=np.float32)
@@ -142,8 +134,8 @@ def create_test_scenario_continuous(bounds, rng, max_obstacles=5, map_resolution
             occ[dist <= r] = 1.0
 
         # Add gaussian blobs (channels 1 and 2)
-        start_blob = _gaussian_blob_np(start, bounds, shape=(res, res), sigma=2.0)
-        goal_blob  = _gaussian_blob_np(goal,  bounds, shape=(res, res), sigma=2.0)
+        start_blob = _gaussian_blob(start.astype(np.float32), bounds, shape=(res, res))
+        goal_blob  = _gaussian_blob(goal.astype(np.float32),  bounds, shape=(res, res))
         map3 = np.stack([occ, start_blob, goal_blob], axis=0)  # (3, H, W)
 
         start_tensor = torch.from_numpy(start.astype(np.float32)).unsqueeze(0).to(device)
@@ -268,7 +260,6 @@ def test_diffusion_continue(policy, config_dict, num_tests=20, device='cuda'):
                 "map": map3,                                  # (3, 64, 64)
             }
             if config.network_config.get("use_xcloud", False):
-                from utils.xcloud_utils import sample_point_cloud_from_grid
                 total_points = config.network_config.get("xcloud_encoder", {}).get("total_points", 128)
                 obs_dict["xcloud"] = sample_point_cloud_from_grid(map3, total_points)
             trajectory, _ = policy.predict_action(obs_dict, initial_action)
