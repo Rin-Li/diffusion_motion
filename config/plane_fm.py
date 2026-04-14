@@ -20,7 +20,7 @@ class PlaneFMConfig:
                 'embed_dim': 64,
                 'total_points': 128,
             },
-            'use_xcloud': True,
+            'use_xcloud': False,
         }
 
         self.flow_matching = {

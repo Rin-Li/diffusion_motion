@@ -135,9 +135,14 @@ def main():
     config      = PlaneFMConfig()
     config_dict = config.to_dict()
 
+    if config.network_config.get("use_xcloud", False):
+        global_cond_dim = config.network_config["xcloud_encoder"]["embed_dim"]
+    else:
+        global_cond_dim = config.network_config["cnn_config"]["output_dim"]
+
     net = ConditionalUnet1D(
         input_dim       = config.action_dim,
-        global_cond_dim = config.network_config["cnn_config"]["output_dim"],
+        global_cond_dim = global_cond_dim,
         network_config  = config.network_config,
         is_cnn          = config.is_CNN,
     )
